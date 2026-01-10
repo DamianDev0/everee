@@ -4,7 +4,7 @@ import { HttpService } from '@nestjs/axios';
 import { AxiosError, AxiosResponse } from 'axios';
 import { firstValueFrom } from 'rxjs';
 
-type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
+type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 @Injectable()
 export class EvereeHttpClient {
@@ -50,6 +50,10 @@ export class EvereeHttpClient {
 
   async corePut<T, B>(endpoint: string, body: B): Promise<T> {
     return this.request<T>('PUT', this.coreBaseUrl, endpoint, body);
+  }
+
+  async corePatch<T, B>(endpoint: string, body: B): Promise<T> {
+    return this.request<T>('PATCH', this.coreBaseUrl, endpoint, body);
   }
 
   async coreDelete<T>(endpoint: string): Promise<T> {

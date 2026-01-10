@@ -1,18 +1,68 @@
-import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { WorkerRepository } from '@modules/payroll/worker/repositories/worker.repository';
 import { EvereeWorkerService } from '@integrations/everee/services/everee-worker.service';
-import { CreateWorkerDto } from '@modules/payroll/worker/dtos/create-worker.dto';
-import { UpdateWorkerDto } from '@modules/payroll/worker/dtos/update-worker.dto';
 import { Worker } from '@modules/payroll/worker/entities/worker.entity';
-import { WorkerStatus, OnboardingStatus } from '@modules/payroll/worker/enums/worker.enum';
-import { PaginationDto, IPaginationResponse } from '@common/dto/pagination.dto';
 import {
-  EvereeCreateWorkerRequest,
-  EvereeCreateWorkerResponse,
-  EvereeCreateComponentSessionRequest,
-  EvereeCreateComponentSessionResponse,
-} from '@integrations/everee/interfaces/worker.interface';
+  WorkerType,
+  WorkerStatus,
+  OnboardingStatus,
+} from '@modules/payroll/worker/enums/worker.enum';
+import {
+  PaginationDto,
+  IPaginationResponse,
+} from '@common/dto/pagination.dto';
+import { WorkerMapper } from './mappers/worker.mapper';
 
+// DTOs - Onboarding (minimal data)
+import {
+  OnboardingContractorDto,
+  OnboardingEmployeeDto,
+} from '@modules/payroll/worker/dtos/onboarding';
+
+// DTOs - Complete (full data)
+import {
+  CreateCompleteContractorDto,
+  CreateCompleteEmployeeDto,
+} from '@modules/payroll/worker/dtos/complete';
+
+// DTOs - Embedded
+import {
+  CreateEmbeddedContractorDto,
+  CreateEmbeddedEmployeeDto,
+  CreateEmbeddedSessionDto,
+} from '@modules/payroll/worker/dtos/embedded';
+
+// DTOs - Management
+import {
+  UpdateWorkerDto,
+  TerminateWorkerDto,
+} from '@modules/payroll/worker/dtos/management';
+
+// Response types
+import {
+  OnboardingContractorResponse,
+  OnboardingEmployeeResponse,
+  CreateCompleteContractorResponse,
+  CreateCompleteEmployeeResponse,
+  EmbeddedContractorResponse,
+  EmbeddedEmployeeResponse,
+  CreateEmbeddedSessionResponse,
+  GetWorkerResponse,
+} from '@integrations/everee/interfaces/response';
+
+/**
+ * WorkerService
+ * Supports:
+ * - Onboarding flows (minimal data)
+ * - Complete worker creation (full data)
+ * - Embedded components
+ * - Worker management (update, terminate, delete)
+ */
 @Injectable()
 export class WorkerService {
   constructor(
@@ -20,67 +70,459 @@ export class WorkerService {
     private readonly evereeWorkerService: EvereeWorkerService,
   ) {}
 
-  async create(dto: CreateWorkerDto): Promise<Worker> {
+
+
+  /**
+   * Create contractor with onboarding flow
+   * Minimal data required - Everee captures the rest
+   */
+  async createOnboardingContractor(
+    dto: OnboardingContractorDto,
+  ): Promise<{ worker: Worker; evereeResponse: OnboardingContractorResponse }> {
+    // Check if worker already exists
     const existing = await this.workerRepository.findByEmail(dto.email);
-    if (existing) throw new ConflictException(`Worker with email ${dto.email} already exists`);
+    if (existing) {
+      throw new ConflictException(
+        `Worker with email ${dto.email} already exists`,
+      );
+    }
 
-    const evereePayload: EvereeCreateWorkerRequest = {
-      externalId: `worker-${dto.email}-${Date.now()}`,
-      firstName: dto.firstName,
-      lastName: dto.lastName,
-      email: dto.email,
-      phoneNumber: dto.phoneNumber,
-      workerType: dto.workerType,
-      ssn: dto.ssn,
-    };
+    // Create worker in Everee
+    const evereeRequest = WorkerMapper.toOnboardingContractorRequest(dto);
+    const evereeResponse =
+      await this.evereeWorkerService.createOnboardingContractor(evereeRequest);
 
-    const evereeResponse: EvereeCreateWorkerResponse = await this.evereeWorkerService.createWorker(evereePayload);
-
+    // Create worker in local database
     const workerData: Partial<Worker> = {
       firstName: dto.firstName,
       lastName: dto.lastName,
       email: dto.email,
       phoneNumber: dto.phoneNumber,
-      workerType: dto.workerType,
-      ssn: dto.ssn,
-      notes: dto.notes,
-      hireDate: evereeResponse.hireDate ? new Date(evereeResponse.hireDate) : undefined,
-      externalId: evereeResponse.externalWorkerId,
+      workerType: WorkerType.CONTRACTOR,
+      externalId: evereeResponse.externalWorkerId || dto.externalWorkerId,
       evereeWorkerId: evereeResponse.workerId,
+      hireDate: new Date(dto.hireDate),
       status: WorkerStatus.PENDING_ONBOARDING,
       onboardingStatus: OnboardingStatus.NOT_STARTED,
       syncedWithEveree: true,
     };
 
-    return this.workerRepository.create(workerData);
+    const worker = await this.workerRepository.create(workerData);
+
+    return { worker, evereeResponse };
   }
 
-  async createOnboardingSession(
-    workerId: string,
-    payload: EvereeCreateComponentSessionRequest,
-  ): Promise<{ url: string }> {
-    const worker = await this.findById(workerId);
-    if (worker.onboardingStatus === OnboardingStatus.COMPLETED) {
-      throw new BadRequestException('Worker onboarding already completed');
+  /**
+   * Create employee with onboarding flow
+   * Minimal data required - Everee captures the rest
+   */
+  async createOnboardingEmployee(
+    dto: OnboardingEmployeeDto,
+  ): Promise<{ worker: Worker; evereeResponse: OnboardingEmployeeResponse }> {
+    // Check if worker already exists
+    const existing = await this.workerRepository.findByEmail(dto.email);
+    if (existing) {
+      throw new ConflictException(
+        `Worker with email ${dto.email} already exists`,
+      );
     }
 
-    const session: EvereeCreateComponentSessionResponse = await this.evereeWorkerService.createOnboardingSession(payload);
+    // Create worker in Everee
+    const evereeRequest = WorkerMapper.toOnboardingEmployeeRequest(dto);
+    const evereeResponse =
+      await this.evereeWorkerService.createOnboardingEmployee(evereeRequest);
 
-    await this.workerRepository.update(worker.id, {
-      onboardingStatus: OnboardingStatus.IN_PROGRESS,
-      onboardingLinkSentAt: new Date(),
-    });
+    // Create worker in local database
+    const workerData: Partial<Worker> = {
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      email: dto.email,
+      phoneNumber: dto.phoneNumber,
+      workerType: WorkerType.EMPLOYEE,
+      externalId: evereeResponse.externalWorkerId || dto.externalWorkerId,
+      evereeWorkerId: evereeResponse.workerId,
+      hireDate: new Date(dto.hireDate),
+      status: WorkerStatus.PENDING_ONBOARDING,
+      onboardingStatus: OnboardingStatus.NOT_STARTED,
+      syncedWithEveree: true,
+    };
 
-    return { url: session.url };
+    const worker = await this.workerRepository.create(workerData);
+
+    return { worker, evereeResponse };
   }
 
-  async completeOnboarding(
+  /**
+   * ==========================================
+   * COMPLETE WORKER CREATION (Full Data)
+   * ==========================================
+   */
+
+  /**
+   * Create complete contractor record
+   * All data provided - no additional onboarding needed
+   */
+  async createCompleteContractor(
+    dto: CreateCompleteContractorDto,
+  ): Promise<{ worker: Worker; evereeResponse: CreateCompleteContractorResponse }> {
+    // Check if worker already exists
+    const existing = await this.workerRepository.findByEmail(dto.email);
+    if (existing) {
+      throw new ConflictException(
+        `Worker with email ${dto.email} already exists`,
+      );
+    }
+
+    // Create worker in Everee
+    const evereeRequest = WorkerMapper.toCompleteContractorRequest(dto);
+    const evereeResponse =
+      await this.evereeWorkerService.createCompleteContractor(evereeRequest);
+
+    // Create worker in local database
+    const workerData: Partial<Worker> = {
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      email: dto.email,
+      phoneNumber: dto.phoneNumber,
+      workerType: WorkerType.CONTRACTOR,
+      externalId: evereeResponse.externalWorkerId || dto.externalWorkerId,
+      evereeWorkerId: evereeResponse.workerId,
+      hireDate: new Date(dto.hireDate),
+      address: dto.homeAddress.line1,
+      city: dto.homeAddress.city,
+      state: dto.homeAddress.state,
+      zipCode: dto.homeAddress.postalCode,
+      status: dto.onboardingComplete
+        ? WorkerStatus.ACTIVE
+        : WorkerStatus.PENDING_ONBOARDING,
+      onboardingStatus: dto.onboardingComplete
+        ? OnboardingStatus.COMPLETED
+        : OnboardingStatus.IN_PROGRESS,
+      onboardingCompletedAt: dto.onboardingComplete ? new Date() : undefined,
+      syncedWithEveree: true,
+    };
+
+    const worker = await this.workerRepository.create(workerData);
+
+    return { worker, evereeResponse };
+  }
+
+  /**
+   * Create complete employee record
+   * All data provided - no additional onboarding needed
+   */
+  async createCompleteEmployee(
+    dto: CreateCompleteEmployeeDto,
+  ): Promise<{ worker: Worker; evereeResponse: CreateCompleteEmployeeResponse }> {
+    // Check if worker already exists
+    const existing = await this.workerRepository.findByEmail(dto.email);
+    if (existing) {
+      throw new ConflictException(
+        `Worker with email ${dto.email} already exists`,
+      );
+    }
+
+    // Create worker in Everee
+    const evereeRequest = WorkerMapper.toCompleteEmployeeRequest(dto);
+    const evereeResponse =
+      await this.evereeWorkerService.createCompleteEmployee(evereeRequest);
+
+    // Create worker in local database
+    const workerData: Partial<Worker> = {
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      email: dto.email,
+      phoneNumber: dto.phoneNumber,
+      workerType: WorkerType.EMPLOYEE,
+      externalId: evereeResponse.externalWorkerId || dto.externalWorkerId,
+      evereeWorkerId: evereeResponse.workerId,
+      hireDate: new Date(dto.hireDate),
+      address: dto.homeAddress.line1,
+      city: dto.homeAddress.city,
+      state: dto.homeAddress.state,
+      zipCode: dto.homeAddress.postalCode,
+      status: dto.onboardingComplete
+        ? WorkerStatus.ACTIVE
+        : WorkerStatus.PENDING_ONBOARDING,
+      onboardingStatus: dto.onboardingComplete
+        ? OnboardingStatus.COMPLETED
+        : OnboardingStatus.IN_PROGRESS,
+      onboardingCompletedAt: dto.onboardingComplete ? new Date() : undefined,
+      syncedWithEveree: true,
+    };
+
+    const worker = await this.workerRepository.create(workerData);
+
+    return { worker, evereeResponse };
+  }
+
+  /**
+   * ==========================================
+   * EMBEDDED COMPONENTS
+   * ==========================================
+   */
+
+  /**
+   * Create contractor for embedded onboarding
+   * Worker completes the rest via embedded component
+   */
+  async createEmbeddedContractor(
+    dto: CreateEmbeddedContractorDto,
+  ): Promise<{ worker: Worker; evereeResponse: EmbeddedContractorResponse }> {
+    // Check if worker already exists
+    const existing = await this.workerRepository.findByEmail(dto.email);
+    if (existing) {
+      throw new ConflictException(
+        `Worker with email ${dto.email} already exists`,
+      );
+    }
+
+    // Create worker in Everee
+    const evereeRequest = WorkerMapper.toEmbeddedContractorRequest(dto);
+    const evereeResponse =
+      await this.evereeWorkerService.createEmbeddedContractor(evereeRequest);
+
+    // Create worker in local database
+    const workerData: Partial<Worker> = {
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      email: dto.email,
+      phoneNumber: dto.phoneNumber,
+      workerType: WorkerType.CONTRACTOR,
+      externalId: evereeResponse.externalWorkerId || dto.externalWorkerId,
+      evereeWorkerId: evereeResponse.workerId,
+      hireDate: new Date(dto.startDate),
+      address: dto.homeAddress.line1,
+      city: dto.homeAddress.city,
+      state: dto.homeAddress.state,
+      zipCode: dto.homeAddress.postalCode,
+      status: WorkerStatus.PENDING_ONBOARDING,
+      onboardingStatus: OnboardingStatus.NOT_STARTED,
+      syncedWithEveree: true,
+    };
+
+    const worker = await this.workerRepository.create(workerData);
+
+    return { worker, evereeResponse };
+  }
+
+  /**
+   * Create employee for embedded onboarding
+   * Worker completes the rest via embedded component
+   */
+  async createEmbeddedEmployee(
+    dto: CreateEmbeddedEmployeeDto,
+  ): Promise<{ worker: Worker; evereeResponse: EmbeddedEmployeeResponse }> {
+    // Check if worker already exists
+    const existing = await this.workerRepository.findByEmail(dto.email);
+    if (existing) {
+      throw new ConflictException(
+        `Worker with email ${dto.email} already exists`,
+      );
+    }
+
+    // Create worker in Everee
+    const evereeRequest = WorkerMapper.toEmbeddedEmployeeRequest(dto);
+    const evereeResponse =
+      await this.evereeWorkerService.createEmbeddedEmployee(evereeRequest);
+
+    // Create worker in local database
+    const workerData: Partial<Worker> = {
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      email: dto.email,
+      phoneNumber: dto.phoneNumber,
+      workerType: WorkerType.EMPLOYEE,
+      externalId: evereeResponse.externalWorkerId || dto.externalWorkerId,
+      evereeWorkerId: evereeResponse.workerId,
+      hireDate: new Date(dto.hireDate),
+      address: dto.homeAddress.line1,
+      city: dto.homeAddress.city,
+      state: dto.homeAddress.state,
+      zipCode: dto.homeAddress.postalCode,
+      status: WorkerStatus.PENDING_ONBOARDING,
+      onboardingStatus: OnboardingStatus.NOT_STARTED,
+      syncedWithEveree: true,
+    };
+
+    const worker = await this.workerRepository.create(workerData);
+
+    return { worker, evereeResponse };
+  }
+
+  /**
+   * Create embedded component session
+   * Returns URL to open in web view for worker to complete onboarding/access features
+   */
+  async createEmbeddedSession(
+    workerId: string,
+    dto: CreateEmbeddedSessionDto,
+  ): Promise<CreateEmbeddedSessionResponse> {
+    const worker = await this.findById(workerId);
+
+    // Use worker's Everee ID or external ID
+    const sessionRequest = WorkerMapper.toEmbeddedSessionRequest({
+      ...dto,
+      workerId: worker.evereeWorkerId,
+      externalWorkerId: dto.externalWorkerId || worker.externalId,
+    });
+
+    const session =
+      await this.evereeWorkerService.createEmbeddedSession(sessionRequest);
+
+    // Update tracking info
+    if (dto.experience === 'ONBOARDING') {
+      await this.workerRepository.update(worker.id, {
+        onboardingStatus: OnboardingStatus.IN_PROGRESS,
+        onboardingLinkSentAt: new Date(),
+      });
+    }
+
+    return session;
+  }
+
+  /**
+   * ==========================================
+   * WORKER MANAGEMENT
+   * ==========================================
+   */
+
+  /**
+   * Get worker from Everee by ID
+   */
+  async getWorkerFromEveree(workerId: string): Promise<GetWorkerResponse> {
+    const worker = await this.findById(workerId);
+    if (!worker.evereeWorkerId) {
+      throw new BadRequestException('Worker has no Everee ID');
+    }
+    return this.evereeWorkerService.getWorkerById(worker.evereeWorkerId);
+  }
+
+  /**
+   * Update worker in both local DB and Everee
+   */
+  async updateWorker(
+    id: string,
+    dto: UpdateWorkerDto,
+  ): Promise<Worker> {
+    const worker = await this.findById(id);
+
+    // Update in Everee if synced
+    if (worker.syncedWithEveree && worker.evereeWorkerId) {
+      const updateRequest = WorkerMapper.toUpdateWorkerRequest(dto);
+      await this.evereeWorkerService.updateWorker(
+        worker.evereeWorkerId,
+        updateRequest,
+      );
+    }
+
+    // Update in local DB
+    return this.workerRepository.update(id, dto);
+  }
+
+  /**
+   * Terminate worker in both local DB and Everee
+   */
+  async terminateWorker(
+    id: string,
+    dto: TerminateWorkerDto,
+  ): Promise<Worker> {
+    const worker = await this.findById(id);
+
+    // Terminate in Everee if synced
+    if (worker.syncedWithEveree && worker.evereeWorkerId) {
+      const terminateRequest = WorkerMapper.toTerminateWorkerRequest(dto);
+      await this.evereeWorkerService.terminateWorker(
+        worker.evereeWorkerId,
+        terminateRequest,
+      );
+    }
+
+    // Update in local DB
+    return this.workerRepository.update(id, {
+      status: WorkerStatus.TERMINATED,
+      terminationDate: new Date(dto.terminationDate),
+    });
+  }
+
+  /**
+   * Delete worker (only if still in onboarding)
+   */
+  async deleteWorker(id: string): Promise<void> {
+    const worker = await this.findById(id);
+
+    if (worker.status !== WorkerStatus.PENDING_ONBOARDING) {
+      throw new BadRequestException(
+        'Can only delete workers still in onboarding',
+      );
+    }
+
+    // Delete from Everee if synced
+    if (worker.syncedWithEveree && worker.evereeWorkerId) {
+      await this.evereeWorkerService.deleteWorker(worker.evereeWorkerId);
+    }
+
+    // Delete from local DB
+    await this.workerRepository.delete(id);
+  }
+
+  /**
+   * ==========================================
+   * QUERY OPERATIONS
+   * ==========================================
+   */
+
+  async findAll(): Promise<Worker[]> {
+    return this.workerRepository.findAll();
+  }
+
+  async findById(id: string): Promise<Worker> {
+    const worker = await this.workerRepository.findById(id);
+    if (!worker) {
+      throw new NotFoundException(`Worker with ID ${id} not found`);
+    }
+    return worker;
+  }
+
+  async findWithPagination(
+    paginationDto: PaginationDto,
+  ): Promise<IPaginationResponse<Worker>> {
+    return this.workerRepository.findWithPagination(paginationDto);
+  }
+
+  /**
+   * ==========================================
+   * HELPER METHODS
+   * ==========================================
+   */
+
+  async validateWorkerIsActive(workerId: string): Promise<void> {
+    const worker = await this.findById(workerId);
+    if (worker.status !== WorkerStatus.ACTIVE) {
+      throw new BadRequestException(`Worker is not active: ${worker.status}`);
+    }
+    if (!worker.evereeWorkerId) {
+      throw new BadRequestException(
+        'Worker has not completed Everee onboarding',
+      );
+    }
+  }
+
+  /**
+   * Handle webhook notification when worker completes onboarding
+   */
+  async handleOnboardingComplete(
     externalWorkerId: string,
     evereeWorkerId: string,
     workerProfile: any,
   ): Promise<Worker> {
-    const worker = await this.workerRepository.findByExternalId(externalWorkerId);
-    if (!worker) throw new NotFoundException(`Worker not found with external ID ${externalWorkerId}`);
+    const worker =
+      await this.workerRepository.findByExternalId(externalWorkerId);
+    if (!worker) {
+      throw new NotFoundException(
+        `Worker not found with external ID ${externalWorkerId}`,
+      );
+    }
 
     const updates: Partial<Worker> = {
       evereeWorkerId,
@@ -92,52 +534,6 @@ export class WorkerService {
       onboardingData: workerProfile,
     };
 
-    if (workerProfile?.address) {
-      updates.address = workerProfile.address.street;
-      updates.city = workerProfile.address.city;
-      updates.state = workerProfile.address.state;
-      updates.zipCode = workerProfile.address.zipCode;
-      updates.country = workerProfile.address.country || 'US';
-    }
-
-    if (workerProfile?.paymentMethod) updates.paymentMethodDetails = workerProfile.paymentMethod;
-    if (workerProfile?.taxInformation) updates.taxInformation = workerProfile.taxInformation;
-
     return this.workerRepository.update(worker.id, updates);
-  }
-
-  async findAll(): Promise<Worker[]> {
-    return this.workerRepository.findAll();
-  }
-
-  async findById(id: string): Promise<Worker> {
-    const worker = await this.workerRepository.findById(id);
-    if (!worker) throw new NotFoundException(`Worker with ID ${id} not found`);
-    return worker;
-  }
-
-  async findWithPagination(paginationDto: PaginationDto): Promise<IPaginationResponse<Worker>> {
-    return this.workerRepository.findWithPagination(paginationDto);
-  }
-
-  async update(id: string, dto: UpdateWorkerDto): Promise<Worker> {
-    const worker = await this.findById(id);
-    return this.workerRepository.update(id, {
-      ...dto,
-      hireDate: dto.hireDate ? new Date(dto.hireDate) : undefined,
-      terminationDate: dto.terminationDate ? new Date(dto.terminationDate) : undefined,
-    });
-  }
-
-  async delete(id: string): Promise<void> {
-    const worker = await this.findById(id);
-    if (worker.syncedWithEveree) throw new BadRequestException('Cannot delete worker synced with Everee');
-    await this.workerRepository.delete(id);
-  }
-
-  async validateWorkerIsActive(workerId: string): Promise<void> {
-    const worker = await this.findById(workerId);
-    if (worker.status !== WorkerStatus.ACTIVE) throw new BadRequestException(`Worker is not active: ${worker.status}`);
-    if (!worker.evereeWorkerId) throw new BadRequestException('Worker has not completed Everee onboarding');
   }
 }
