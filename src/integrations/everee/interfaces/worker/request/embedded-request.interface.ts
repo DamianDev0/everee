@@ -3,7 +3,7 @@
  * Request payloads for embedded component session management
  */
 
-import { EmbeddedExperience, EmbeddedExperienceVersion } from '../common/enums';
+import { EmbeddedExperience, EmbeddedExperienceVersion } from '../../common/enums';
 
 /**
  * Experience Options for customizing embedded components

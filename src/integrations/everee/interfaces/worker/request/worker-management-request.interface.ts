@@ -1,5 +1,5 @@
-import { PayType, PaySchedule, AccountType } from '../common/enums';
-import { Money } from '../common/types';
+import { PayType, PaySchedule, AccountType } from '../../common/enums';
+import { Money } from '../../common/types';
 
 export interface UpdatePersonalInfoRequest {
   firstName: string;

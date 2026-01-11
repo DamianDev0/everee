@@ -27,7 +27,7 @@ import {
   GetPayHistoryQuery,
   GetPayStubsQuery,
   GetPayStubDownloadQuery,
-} from '../interfaces/request';
+} from '../interfaces/worker';
 
 // Response interfaces
 import {
@@ -48,7 +48,7 @@ import {
   PaymentHistoryItem,
   PayStub,
   PayStubDownloadResponse,
-} from '../interfaces/response';
+} from '../interfaces/worker';
 
 /**
  * EvereeWorkerService

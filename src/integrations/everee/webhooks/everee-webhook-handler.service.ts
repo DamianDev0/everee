@@ -105,6 +105,9 @@ export class EvereeWebhookHandlerService {
       workerId,
       payload.data.object,
     );
+    this.logger.log(
+      `Worker onboarding completed for workerId: ${workerId}, externalWorkerId: ${externalWorkerId}`,
+    );
   }
 
   private async handlePaymentMethodUpdated(

@@ -1,109 +1,97 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { EvereeHttpClient } from '@integrations/config/http-everee.config';
 import {
-  EvereeCreateShiftRequest,
-  EvereeShiftResponse,
-  EvereeUpdateShiftRequest,
-  EvereeShiftCorrectionRequest,
-  EvereeShiftCorrectionResponse,
-} from '../interfaces/shift.interface';
+  CreateShiftRequest,
+  UpdateShiftRequest,
+  ShiftResponse,
+  BulkClassifiedHoursRequest,
+  ListShiftsQuery,
+} from '../interfaces/shift';
 
 @Injectable()
 export class EvereeShiftService {
-  private readonly logger = new Logger(EvereeShiftService.name);
-
   constructor(private readonly httpClient: EvereeHttpClient) {}
 
   async createShift(
-    request: EvereeCreateShiftRequest,
-  ): Promise<EvereeShiftResponse> {
-    this.logger.log(
-      `Creating shift for worker ${request.workerId} on ${request.shiftStartTime}`,
+    request: CreateShiftRequest,
+    correctionAuthorized = false,
+  ): Promise<ShiftResponse> {
+    const queryParam = correctionAuthorized ? '?correction-authorized=true' : '';
+    return this.httpClient.integrationPost<ShiftResponse, CreateShiftRequest>(
+      `/labor/timesheet/worked-shifts${queryParam}`,
+      request,
     );
-
-    const response = await this.httpClient.corePost<
-      EvereeShiftResponse,
-      EvereeCreateShiftRequest
-    >('/shifts', request);
-
-    this.logger.log(`Shift created successfully. Shift ID: ${response.shiftId}`);
-
-    return response;
-  }
-
-  async getShift(shiftId: string): Promise<EvereeShiftResponse> {
-    this.logger.log(`Fetching shift details for ID: ${shiftId}`);
-
-    return this.httpClient.coreGet<EvereeShiftResponse>(
-      `/shifts/${shiftId}`,
-    );
-  }
-
-  async getShiftByExternalId(
-    externalId: string,
-  ): Promise<EvereeShiftResponse | null> {
-    this.logger.log(`Fetching shift by external ID: ${externalId}`);
-
-    try {
-      return await this.httpClient.coreGet<EvereeShiftResponse>(
-        `/shifts/external/${externalId}`,
-      );
-    } catch {
-      this.logger.warn(`Shift not found with external ID: ${externalId}`);
-      return null;
-    }
   }
 
   async updateShift(
-    shiftId: string,
-    updates: EvereeUpdateShiftRequest,
-  ): Promise<EvereeShiftResponse> {
-    this.logger.log(`Updating shift ${shiftId}`);
-
-    const response = await this.httpClient.corePut<
-      EvereeShiftResponse,
-      EvereeUpdateShiftRequest
-    >(`/shifts/${shiftId}`, updates);
-
-    this.logger.log(`Shift ${shiftId} updated successfully`);
-
-    return response;
+    workedShiftId: number,
+    request: UpdateShiftRequest,
+    correctionAuthorized = false,
+  ): Promise<ShiftResponse> {
+    const queryParam = correctionAuthorized ? '?correction-authorized=true' : '';
+    return this.httpClient.integrationPut<ShiftResponse, UpdateShiftRequest>(
+      `/labor/timesheet/worked-shifts/${workedShiftId}${queryParam}`,
+      request,
+    );
   }
 
-  async correctShift(
-    request: EvereeShiftCorrectionRequest,
-  ): Promise<EvereeShiftCorrectionResponse> {
-    this.logger.log(
-      `Correcting shift ${request.shiftId} with authorized=${request.correctionAuthorized}`,
+  async deleteShift(
+    workedShiftId: number,
+    correctionAuthorized = false,
+  ): Promise<void> {
+    const queryParam = correctionAuthorized ? '?correction-authorized=true' : '';
+    return this.httpClient.integrationDelete(
+      `/labor/timesheet/worked-shifts/${workedShiftId}${queryParam}`,
     );
-
-    const response = await this.httpClient.corePost<
-      EvereeShiftCorrectionResponse,
-      EvereeShiftCorrectionRequest
-    >('/shifts/corrections', request);
-
-    this.logger.log(
-      `Shift correction created. Correction ID: ${response.correctionId}`,
-    );
-
-    return response;
   }
 
-  async deleteShift(shiftId: string): Promise<void> {
-    this.logger.log(`Deleting shift ${shiftId}`);
-
-    await this.httpClient.coreDelete<void>(
-      `/shifts/${shiftId}`,
+  async getShift(shiftId: number): Promise<ShiftResponse> {
+    return this.httpClient.integrationGet<ShiftResponse>(
+      `/labor/timesheet/worked-shifts/${shiftId}`,
     );
-
-    this.logger.log(`Shift ${shiftId} deleted successfully`);
   }
 
-  async listShiftsByWorker(workerId: string): Promise<EvereeShiftResponse[]> {
-    this.logger.log(`Fetching shifts for worker ${workerId}`);
+  async listShifts(query?: ListShiftsQuery): Promise<ShiftResponse[]> {
+    const params = new URLSearchParams();
 
-    return this.httpClient.coreGet<EvereeShiftResponse[]>(
-      `/workers/${workerId}/shifts`,
+    if (query?.['worker-id']) {
+      query['worker-id'].forEach(id => params.append('worker-id', id));
+    }
+    if (query?.['external-worker-id']) {
+      query['external-worker-id'].forEach(id => params.append('external-worker-id', id));
+    }
+    if (query?.['payment-id']) {
+      query['payment-id'].forEach(id => params.append('payment-id', id.toString()));
+    }
+    if (query?.['min-work-location-start-date']) {
+      params.append('min-work-location-start-date', query['min-work-location-start-date']);
+    }
+    if (query?.['max-work-location-start-date']) {
+      params.append('max-work-location-start-date', query['max-work-location-start-date']);
+    }
+    if (query?.['min-work-location-end-date']) {
+      params.append('min-work-location-end-date', query['min-work-location-end-date']);
+    }
+    if (query?.['max-work-location-end-date']) {
+      params.append('max-work-location-end-date', query['max-work-location-end-date']);
+    }
+    if (query?.page !== undefined) params.append('page', query.page.toString());
+    if (query?.size !== undefined) params.append('size', query.size.toString());
+
+    const queryString = params.toString();
+    return this.httpClient.integrationGet<ShiftResponse[]>(
+      `/labor/timesheet/worked-shifts${queryString ? `?${queryString}` : ''}`,
+    );
+  }
+
+  async updateBulkClassifiedHours(
+    request: BulkClassifiedHoursRequest,
+    correctionAuthorized = false,
+  ): Promise<void> {
+    const queryParam = correctionAuthorized ? '?correction-authorized=true' : '';
+    return this.httpClient.integrationPost<void, BulkClassifiedHoursRequest>(
+      `/labor/classified-hours/bulk${queryParam}`,
+      request,
     );
   }
 }

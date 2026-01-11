@@ -14,7 +14,7 @@ import {
   CreateEmbeddedSessionRequest,
   UpdateWorkerRequest,
   TerminateWorkerRequest,
-} from '@integrations/everee/interfaces/request';
+} from '@integrations/everee/interfaces/worker';
 
 import {
   OnboardingContractorDto,

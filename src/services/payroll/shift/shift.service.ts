@@ -99,27 +99,26 @@ export class ShiftService {
 
     const totalHours = (totalMinutes - unpaidBreakMinutes) / 60;
 
-    // Create shift in Everee
+    const workLocation = dto.workLocationId
+      ? await this.workLocationRepository.findById(dto.workLocationId)
+      : undefined;
+
     const evereeResponse = await this.evereeShiftService.createShift({
-      externalId: dto.externalId,
       workerId: worker.evereeWorkerId,
-      workLocationId: dto.workLocationId
-        ? (await this.workLocationRepository.findById(dto.workLocationId))
-            .evereeLocationId
+      shiftStartEpochSeconds: Math.floor(new Date(dto.shiftStartTime).getTime() / 1000),
+      shiftEndEpochSeconds: dto.shiftEndTime ? Math.floor(new Date(dto.shiftEndTime).getTime() / 1000) : undefined,
+      createBreaks: dto.breaks?.map(b => ({
+        breakStartEpochSeconds: Math.floor(new Date(b.startTime).getTime() / 1000),
+        breakEndEpochSeconds: Math.floor(new Date(b.endTime).getTime() / 1000),
+      })),
+      effectiveHourlyPayRate: dto.effectiveHourlyPayRate
+        ? { amount: dto.effectiveHourlyPayRate, currency: 'USD' }
         : undefined,
-      shiftStartTime: dto.shiftStartTime,
-      shiftEndTime: dto.shiftEndTime,
-      breaks: dto.breaks,
-      effectiveHourlyPayRate: dto.effectiveHourlyPayRate,
+      workLocationId: workLocation?.evereeLocationId ? Number(workLocation.evereeLocationId) : undefined,
       workersCompClassCode: dto.workersCompClassCode,
-      metadata: {
-        projectName: dto.projectName,
-        projectId: dto.projectId,
-        notes: dto.notes,
-      },
+      note: dto.notes,
     });
 
-    // Create shift record in database
     const shift = await this.shiftRepository.create({
       ...dto,
       totalHours,
@@ -127,11 +126,12 @@ export class ShiftService {
       status: ShiftStatus.SUBMITTED,
     } as any);
 
-    // Update with Everee data
-    shift.evereeShiftId = evereeResponse.shiftId;
-    shift.regularHours = evereeResponse.regularHours;
-    shift.overtimeHours = evereeResponse.overtimeHours;
-    shift.calculatedGrossPay = evereeResponse.grossPay;
+    shift.evereeShiftId = evereeResponse.workedShiftId.toString();
+    const regularHours = this.parseDuration(evereeResponse.shiftDurations.regularTimeWorked.totalDuration);
+    const overtimeHours = this.parseDuration(evereeResponse.shiftDurations.overtimeWorked.totalDuration);
+    shift.regularHours = regularHours;
+    shift.overtimeHours = overtimeHours;
+    shift.calculatedGrossPay = parseFloat(evereeResponse.payableDetails.totalPayableAmount.amount?.toString() || '0');
     shift.syncedWithEveree = true;
     shift.lastSyncedWithEvereeAt = new Date();
     shift.submittedAt = new Date();
@@ -187,18 +187,23 @@ export class ShiftService {
       return existingCorrection;
     }
 
-    // Create correction in Everee
-    const evereeResponse = await this.evereeShiftService.correctShift({
-      shiftId: originalShift.evereeShiftId,
-      externalId: dto.externalId,
-      shiftStartTime: dto.shiftStartTime,
-      shiftEndTime: dto.shiftEndTime,
-      breaks: dto.breaks,
-      effectiveHourlyPayRate: dto.effectiveHourlyPayRate,
-      correctionAuthorized: dto.correctionAuthorized,
-      correctionNotes: dto.correctionNotes,
-      correctionPaymentTimeframe: dto.correctionPaymentTimeframe,
-    });
+    const evereeResponse = await this.evereeShiftService.updateShift(
+      Number(originalShift.evereeShiftId),
+      {
+        shiftStartEpochSeconds: Math.floor(new Date(dto.shiftStartTime).getTime() / 1000),
+        shiftEndEpochSeconds: dto.shiftEndTime ? Math.floor(new Date(dto.shiftEndTime).getTime() / 1000) : undefined,
+        createBreaks: dto.breaks?.map(b => ({
+          breakStartEpochSeconds: Math.floor(new Date(b.startTime).getTime() / 1000),
+          breakEndEpochSeconds: Math.floor(new Date(b.endTime).getTime() / 1000),
+        })),
+        effectiveHourlyPayRate: dto.effectiveHourlyPayRate
+          ? { amount: dto.effectiveHourlyPayRate, currency: 'USD' }
+          : undefined,
+        correctionPaymentTimeframe: dto.correctionPaymentTimeframe as any,
+        note: dto.correctionNotes,
+      },
+      dto.correctionAuthorized,
+    );
 
     // Calculate total hours for correction
     const start = new Date(dto.shiftStartTime);
@@ -230,11 +235,12 @@ export class ShiftService {
       status: ShiftStatus.PROCESSED,
     } as any);
 
-    // Update with Everee data
-    correctionShift.evereeShiftId = evereeResponse.correctionId;
-    correctionShift.regularHours = evereeResponse.regularHours;
-    correctionShift.overtimeHours = evereeResponse.overtimeHours;
-    correctionShift.calculatedGrossPay = evereeResponse.grossPay;
+    correctionShift.evereeShiftId = evereeResponse.workedShiftId.toString();
+    const regularHours = this.parseDuration(evereeResponse.shiftDurations.regularTimeWorked.totalDuration);
+    const overtimeHours = this.parseDuration(evereeResponse.shiftDurations.overtimeWorked.totalDuration);
+    correctionShift.regularHours = regularHours;
+    correctionShift.overtimeHours = overtimeHours;
+    correctionShift.calculatedGrossPay = parseFloat(evereeResponse.payableDetails.totalPayableAmount.amount?.toString() || '0');
     correctionShift.syncedWithEveree = true;
     correctionShift.lastSyncedWithEvereeAt = new Date();
     correctionShift.processedAt = new Date();
@@ -356,13 +362,23 @@ export class ShiftService {
       );
     }
 
-    // Delete from Everee if synced
     if (shift.evereeShiftId) {
-      await this.evereeShiftService.deleteShift(shift.evereeShiftId);
+      await this.evereeShiftService.deleteShift(Number(shift.evereeShiftId));
     }
 
     await this.shiftRepository.delete(id);
 
     this.logger.log(`Shift ${id} deleted successfully`);
+  }
+
+  private parseDuration(duration: string): number {
+    const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if (!match) return 0;
+
+    const hours = parseInt(match[1] || '0', 10);
+    const minutes = parseInt(match[2] || '0', 10);
+    const seconds = parseInt(match[3] || '0', 10);
+
+    return hours + minutes / 60 + seconds / 3600;
   }
 }

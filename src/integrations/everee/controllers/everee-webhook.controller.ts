@@ -11,8 +11,8 @@ import {
 } from '@nestjs/common';
 import type { RawBodyRequest } from '@nestjs/common';
 import { Request } from 'express';
-import { EvereeWebhookAuthService } from '../services/everee-webhook-auth.service';
-import { EvereeWebhookHandlerService } from '../services/everee-webhook-handler.service';
+import { EvereeWebhookAuthService } from '../webhooks/everee-webhook-auth.service';
+import { EvereeWebhookHandlerService } from '../webhooks/everee-webhook-handler.service';
 import type { WebhookPayloadEnvelope } from '../interfaces/webhook/webhook-event.interface';
 
 @Controller('webhooks/everee')

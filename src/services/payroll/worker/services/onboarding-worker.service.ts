@@ -15,7 +15,7 @@ import {
 import {
   OnboardingContractorResponse,
   OnboardingEmployeeResponse,
-} from '@integrations/everee/interfaces/response';
+} from '@integrations/everee/interfaces/worker';
 
 @Injectable()
 export class OnboardingWorkerService {

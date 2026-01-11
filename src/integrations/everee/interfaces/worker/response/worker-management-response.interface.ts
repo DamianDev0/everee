@@ -1,4 +1,4 @@
-import { Money } from '../common/types';
+import { Money } from '../../common/types';
 import { GetWorkerResponse } from './worker-response.interface';
 
 export interface WorkerListItem {

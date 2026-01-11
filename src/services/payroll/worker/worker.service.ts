@@ -33,7 +33,7 @@ import {
   EmbeddedEmployeeResponse,
   CreateEmbeddedSessionResponse,
   GetWorkerResponse,
-} from '@integrations/everee/interfaces/response';
+} from '@integrations/everee/interfaces/worker';
 import { CompleteWorkerService, EmbeddedWorkerService, OnboardingWorkerService, WorkerManagementService } from './services';
 
 @Injectable()

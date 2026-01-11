@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { EvereeWebhookController } from './controllers/everee-webhook.controller';
-import { EvereeWebhookAuthService } from './services/everee-webhook-auth.service';
-import { EvereeWebhookHandlerService } from './services/everee-webhook-handler.service';
+import { EvereeWebhookAuthService } from './webhooks/everee-webhook-auth.service';
+import { EvereeWebhookHandlerService } from './webhooks/everee-webhook-handler.service';
 import { WorkerModule } from '@services/payroll/worker/worker.module';
 
 @Module({

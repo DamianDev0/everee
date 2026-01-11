@@ -16,7 +16,7 @@ import {
   UpdateWorkerDto,
   TerminateWorkerDto,
 } from '@modules/payroll/worker/dtos/management';
-import { GetWorkerResponse } from '@integrations/everee/interfaces/response';
+import { GetWorkerResponse } from '@integrations/everee/interfaces/worker';
 
 @Injectable()
 export class WorkerManagementService {

@@ -17,7 +17,7 @@ import {
   EmbeddedContractorResponse,
   EmbeddedEmployeeResponse,
   CreateEmbeddedSessionResponse,
-} from '@integrations/everee/interfaces/response';
+} from '@integrations/everee/interfaces/worker';
 
 @Injectable()
 export class EmbeddedWorkerService {

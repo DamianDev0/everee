@@ -1,112 +1,83 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { EvereeHttpClient } from '@integrations/config/http-everee.config';
 import {
-  EvereeCreatePayableRequest,
-  EvereePayableResponse,
-  EvereeApprovePayableRequest,
-  EvereeRejectPayableRequest,
-  EvereeProcessPayablesRequest,
-  EvereeProcessPayablesResponse,
-} from '../interfaces/payable.interface';
+  CreatePayableRequest,
+  CreatePayableBulkRequest,
+  UpdatePayableRequest,
+  ProcessPayablesRequest,
+  DeletePayablesBulkRequest,
+  ListUnpaidPayablesQuery,
+  PayableResponse,
+  PaginatedPayableResponse,
+  CreatePayableBulkResponse,
+  ProcessPayablesResponse,
+} from '../interfaces/payable';
 
 @Injectable()
 export class EvereePayableService {
-  private readonly logger = new Logger(EvereePayableService.name);
-
   constructor(private readonly httpClient: EvereeHttpClient) {}
 
-  async createPayable(
-    request: EvereeCreatePayableRequest,
-  ): Promise<EvereePayableResponse> {
-    this.logger.log(
-      `Creating payable for worker ${request.workerId}, amount: $${request.amount}`,
-    );
-
-    const response = await this.httpClient.corePost<
-      EvereePayableResponse,
-      EvereeCreatePayableRequest
-    >('/payables', request);
-
-    this.logger.log(
-      `Payable created successfully. Payable ID: ${response.payableId}`,
-    );
-
-    return response;
-  }
-
-  async getPayable(payableId: string): Promise<EvereePayableResponse> {
-    this.logger.log(`Fetching payable details for ID: ${payableId}`);
-
-    return this.httpClient.coreGet<EvereePayableResponse>(
-      `/payables/${payableId}`,
+  async createPayable(request: CreatePayableRequest): Promise<PayableResponse> {
+    return this.httpClient.corePost<PayableResponse, CreatePayableRequest>(
+      '/payables',
+      request,
     );
   }
 
-  async getPayableByExternalId(
+  async createPayablesBulk(
+    request: CreatePayableBulkRequest,
+  ): Promise<CreatePayableBulkResponse> {
+    return this.httpClient.corePost<CreatePayableBulkResponse, CreatePayableBulkRequest>(
+      '/payables/bulk',
+      request,
+    );
+  }
+
+  async updatePayable(
     externalId: string,
-  ): Promise<EvereePayableResponse | null> {
-    this.logger.log(`Fetching payable by external ID: ${externalId}`);
-
-    try {
-      return await this.httpClient.coreGet<EvereePayableResponse>(
-        `/payables/external/${externalId}`,
-      );
-    } catch {
-      this.logger.warn(`Payable not found with external ID: ${externalId}`);
-      return null;
-    }
+    request: UpdatePayableRequest,
+  ): Promise<PayableResponse> {
+    return this.httpClient.corePut<PayableResponse, UpdatePayableRequest>(
+      `/payables/${externalId}`,
+      request,
+    );
   }
 
-  async approvePayable(
-    payableId: string,
-    request?: EvereeApprovePayableRequest,
-  ): Promise<EvereePayableResponse> {
-    this.logger.log(`Approving payable ${payableId}`);
-
-    return this.httpClient.corePost<
-      EvereePayableResponse,
-      EvereeApprovePayableRequest
-    >(`/payables/${payableId}/approve`, request || {});
+  async getPayable(externalId: string): Promise<PayableResponse> {
+    return this.httpClient.coreGet<PayableResponse>(`/payables/${externalId}`);
   }
 
-  async rejectPayable(
-    payableId: string,
-    request: EvereeRejectPayableRequest,
-  ): Promise<EvereePayableResponse> {
-    this.logger.log(`Rejecting payable ${payableId}`);
+  async listUnpaidPayables(
+    externalWorkerId: string,
+    query?: ListUnpaidPayablesQuery,
+  ): Promise<PaginatedPayableResponse> {
+    const params = new URLSearchParams();
+    if (query?.page !== undefined) params.append('page', query.page.toString());
+    if (query?.size !== undefined) params.append('size', query.size.toString());
 
-    return this.httpClient.corePost<
-      EvereePayableResponse,
-      EvereeRejectPayableRequest
-    >(`/payables/${payableId}/reject`, request);
+    const queryString = params.toString();
+    return this.httpClient.coreGet<PaginatedPayableResponse>(
+      `/payables/unpaid-for-worker/${externalWorkerId}${queryString ? `?${queryString}` : ''}`,
+    );
+  }
+
+  async deletePayable(externalId: string): Promise<void> {
+    return this.httpClient.coreDelete(`/payables/${externalId}`);
+  }
+
+  async deletePayablesBulk(request: DeletePayablesBulkRequest): Promise<void> {
+    return this.httpClient.corePost<void, DeletePayablesBulkRequest>(
+      '/payables/delete-bulk',
+      request,
+    );
   }
 
   async processPayablesForPayout(
-    payableIds: string[],
-  ): Promise<EvereeProcessPayablesResponse> {
-    this.logger.log(`Processing ${payableIds.length} payables for payout`);
-
-    return this.httpClient.corePost<
-      EvereeProcessPayablesResponse,
-      EvereeProcessPayablesRequest
-    >('/payables/process', { payableIds });
-  }
-
-  async deletePayable(payableId: string): Promise<void> {
-    this.logger.log(`Deleting payable ${payableId}`);
-
-    await this.httpClient.coreDelete<void>(
-      `/payables/${payableId}`,
-    );
-  }
-
-  async listPayablesByWorker(
-    workerId: string,
-  ): Promise<EvereePayableResponse[]> {
-    this.logger.log(`Fetching payables for worker ${workerId}`);
-
-    return this.httpClient.coreGet<EvereePayableResponse[]>(
-      `/workers/${workerId}/payables`,
+    request: ProcessPayablesRequest,
+  ): Promise<ProcessPayablesResponse> {
+    return this.httpClient.corePost<ProcessPayablesResponse, ProcessPayablesRequest>(
+      '/payables/payment-request',
+      request,
     );
   }
 }

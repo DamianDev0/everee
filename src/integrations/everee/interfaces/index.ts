@@ -3,11 +3,9 @@
  * Main barrel export for all Everee integration interfaces
  */
 
-// Common types and enums
 export * from './common';
-
-// Request interfaces
-export * from './request';
-
-// Response interfaces
-export * from './response';
+export * from './worker';
+export * from './shift';
+export * from './payable';
+export * from './work-location';
+export * from './webhook/webhook-event.interface';

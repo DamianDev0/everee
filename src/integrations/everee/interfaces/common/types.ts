@@ -11,7 +11,7 @@ import { StateAbbreviation, AccountType, MaritalStatus } from './enums';
  */
 export interface Money {
   currency: string;
-  amount?: number;
+  amount?: string | number;
 }
 
 /**

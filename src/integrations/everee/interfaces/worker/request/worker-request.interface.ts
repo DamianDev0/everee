@@ -7,14 +7,14 @@ import {
   PayType,
   PaySchedule,
   PayeeType,
-} from '../common/enums';
+} from '../../common/enums';
 import {
   Money,
   HomeAddressRequest,
   LegalWorkAddressRequest,
   BankAccountRequest,
   WithholdingSettingsRequest,
-} from '../common/types';
+} from '../../common/types';
 
 /**
  * ==========================================

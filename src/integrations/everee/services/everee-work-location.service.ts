@@ -7,7 +7,7 @@ import {
   CreateApprovalGroupRequest,
   ApprovalGroupResponse,
   PaginatedApprovalGroupResponse,
-} from '../interfaces/work-location.interface';
+} from '../interfaces/work-location';
 
 @Injectable()
 export class EvereeWorkLocationService {

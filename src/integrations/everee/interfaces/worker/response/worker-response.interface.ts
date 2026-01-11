@@ -7,7 +7,7 @@ import {
   WorkerType,
   LifecycleStatus,
   OnboardingStatus,
-} from '../common/enums';
+} from '../../common/enums';
 import {
   PositionResponse,
   HomeAddressResponse,
@@ -19,7 +19,7 @@ import {
   PayPeriodPreferenceOption,
   WorkerIntegrationId,
   AvailablePaymentMethods,
-} from '../common/types';
+} from '../../common/types';
 
 /**
  * Base Worker Response
