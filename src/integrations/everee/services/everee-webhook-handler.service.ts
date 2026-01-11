@@ -21,6 +21,9 @@ export class EvereeWebhookHandlerService {
     this.logger.log(
       `Processing webhook event: ${payload.type} for event ID: ${payload.id}`,
     );
+    this.logger.log(
+      `Full webhook payload: ${JSON.stringify(payload, null, 2)}`,
+    );
 
     try {
       switch (payload.type) {

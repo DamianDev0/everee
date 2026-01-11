@@ -32,6 +32,6 @@ import {
     EvereeHttpClient,
     EvereeWorkerService,
   ],
-  exports: [WorkerService, WorkerRepository],
+  exports: [WorkerService, WorkerRepository, WorkerManagementService],
 })
 export class WorkerModule {}
