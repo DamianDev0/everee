@@ -1,41 +1,51 @@
-export interface EvereeCreateWorkLocationRequest {
-  externalId: string;
+export interface CreateWorkLocationRequest {
   name: string;
-  address: string;
+  line1: string;
+  line2?: string;
   city: string;
   state: string;
-  stateAbbreviation: string;
-  zipCode: string;
-  country?: string;
+  postalCode: string;
+  phoneNumber?: string;
   latitude?: number;
   longitude?: number;
+  effectiveDate: string;
+  externalId?: string;
 }
 
-export interface EvereeWorkLocationResponse {
-  locationId: string;
-  externalId: string;
-  name: string;
-  address: string;
+export interface WorkLocationResponse {
+  id: number;
+  line1: string;
+  line2?: string;
   city: string;
   state: string;
-  stateAbbreviation: string;
-  zipCode: string;
-  country: string;
-  latitude?: number;
-  longitude?: number;
-  taxJurisdictionCode?: string;
-  createdAt: string;
-  updatedAt?: string;
+  postalCode: string;
+  latitude: number;
+  longitude: number;
+  timeZone: string;
 }
 
-export interface EvereeUpdateWorkLocationRequest {
-  name?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  stateAbbreviation?: string;
-  zipCode?: string;
-  country?: string;
-  latitude?: number;
-  longitude?: number;
+export interface PaginatedWorkLocationResponse {
+  pageNumber: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  items: WorkLocationResponse[];
+}
+
+export interface CreateApprovalGroupRequest {
+  name: string;
+}
+
+export interface ApprovalGroupResponse {
+  id: number;
+  name: string;
+  deleted: boolean;
+}
+
+export interface PaginatedApprovalGroupResponse {
+  pageNumber: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  items: ApprovalGroupResponse[];
 }

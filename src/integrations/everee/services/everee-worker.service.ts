@@ -12,6 +12,21 @@ import {
   UpdateWorkerRequest,
   TerminateWorkerRequest,
   CreateEmbeddedSessionRequest,
+  UpdatePersonalInfoRequest,
+  UpdatePositionRequest,
+  UpdateBankAccountRequest,
+  UpdateLegalWorkLocationRequest,
+  UpdateHomeAddressRequest,
+  UpdateWorkerIdRequest,
+  UpdateTaxpayerIdentifierRequest,
+  UpdatePaymentPreferencesRequest,
+  UpdateHireDateRequest,
+  UpdateEmergencyContactRequest,
+  ListWorkersQuery,
+  SearchWorkersQuery,
+  GetPayHistoryQuery,
+  GetPayStubsQuery,
+  GetPayStubDownloadQuery,
 } from '../interfaces/request';
 
 // Response interfaces
@@ -26,6 +41,13 @@ import {
   UpdateWorkerResponse,
   TerminateWorkerResponse,
   CreateEmbeddedSessionResponse,
+  PaginatedResponse,
+  SearchWorkersResponse,
+  OnboardingAccessDetailsResponse,
+  LeaveBalance,
+  PaymentHistoryItem,
+  PayStub,
+  PayStubDownloadResponse,
 } from '../interfaces/response';
 
 /**
@@ -203,6 +225,186 @@ export class EvereeWorkerService {
     return this.httpClient.corePost<TerminateWorkerResponse, TerminateWorkerRequest>(
       `/workers/${workerId}/terminate`,
       payload,
+    );
+  }
+
+  async listWorkers(query?: ListWorkersQuery): Promise<PaginatedResponse<GetWorkerResponse>> {
+    const params = new URLSearchParams();
+    if (query?.id && query.id.length > 0) params.append('id', query.id.join(','));
+    if (query?.lifecycleStatus && query.lifecycleStatus.length > 0) {
+      params.append('lifecycleStatus', query.lifecycleStatus.join(','));
+    }
+    if (query?.page) params.append('page', query.page.toString());
+    if (query?.size) params.append('size', query.size.toString());
+
+    const queryString = params.toString();
+    return this.httpClient.integrationGet<PaginatedResponse<GetWorkerResponse>>(
+      `/workers${queryString ? `?${queryString}` : ''}`,
+    );
+  }
+
+  async searchWorkers(query: SearchWorkersQuery): Promise<SearchWorkersResponse> {
+    const params = new URLSearchParams();
+    params.append('term', query.term);
+
+    return this.httpClient.integrationGet<SearchWorkersResponse>(
+      `/workers/search?${params.toString()}`,
+    );
+  }
+
+  async getOnboardingAccessDetails(workerId: string): Promise<OnboardingAccessDetailsResponse> {
+    return this.httpClient.integrationGet<OnboardingAccessDetailsResponse>(
+      `/workers/onboarding-access-details?workerId=${workerId}`,
+    );
+  }
+
+  async getLeaveBalances(workerId: string): Promise<LeaveBalance[]> {
+    return this.httpClient.integrationGet<LeaveBalance[]>(
+      `/workers/${workerId}/leave-balances`,
+    );
+  }
+
+  async updatePersonalInfo(
+    workerId: string,
+    payload: UpdatePersonalInfoRequest,
+  ): Promise<GetWorkerResponse> {
+    return this.httpClient.integrationPut<GetWorkerResponse, UpdatePersonalInfoRequest>(
+      `/workers/${workerId}/personal-info`,
+      payload,
+    );
+  }
+
+  async updatePosition(
+    workerId: string,
+    payload: UpdatePositionRequest,
+  ): Promise<GetWorkerResponse> {
+    return this.httpClient.integrationPut<GetWorkerResponse, UpdatePositionRequest>(
+      `/workers/${workerId}/position`,
+      payload,
+    );
+  }
+
+  async updateBankAccount(
+    workerId: string,
+    payload: UpdateBankAccountRequest,
+  ): Promise<GetWorkerResponse> {
+    return this.httpClient.integrationPut<GetWorkerResponse, UpdateBankAccountRequest>(
+      `/workers/${workerId}/bank-accounts/default`,
+      payload,
+    );
+  }
+
+  async updateLegalWorkLocation(
+    workerId: string,
+    payload: UpdateLegalWorkLocationRequest,
+  ): Promise<GetWorkerResponse> {
+    return this.httpClient.integrationPut<GetWorkerResponse, UpdateLegalWorkLocationRequest>(
+      `/workers/${workerId}/legal-location`,
+      payload,
+    );
+  }
+
+  async updateHomeAddress(
+    workerId: string,
+    payload: UpdateHomeAddressRequest,
+  ): Promise<GetWorkerResponse> {
+    return this.httpClient.integrationPut<GetWorkerResponse, UpdateHomeAddressRequest>(
+      `/workers/${workerId}/address`,
+      payload,
+    );
+  }
+
+  async updateWorkerId(
+    workerId: string,
+    payload: UpdateWorkerIdRequest,
+  ): Promise<GetWorkerResponse> {
+    return this.httpClient.integrationPut<GetWorkerResponse, UpdateWorkerIdRequest>(
+      `/workers/${workerId}/worker-identifier`,
+      payload,
+    );
+  }
+
+  async updateTaxpayerIdentifier(
+    workerId: string,
+    payload: UpdateTaxpayerIdentifierRequest,
+  ): Promise<GetWorkerResponse> {
+    return this.httpClient.integrationPut<GetWorkerResponse, UpdateTaxpayerIdentifierRequest>(
+      `/workers/${workerId}/taxpayer-identifier`,
+      payload,
+    );
+  }
+
+  async updatePaymentPreferences(
+    workerId: string,
+    payload: UpdatePaymentPreferencesRequest,
+  ): Promise<GetWorkerResponse> {
+    return this.httpClient.integrationPut<GetWorkerResponse, UpdatePaymentPreferencesRequest>(
+      `/workers/${workerId}/payment-info`,
+      payload,
+    );
+  }
+
+  async updateHireDate(
+    workerId: string,
+    payload: UpdateHireDateRequest,
+  ): Promise<GetWorkerResponse> {
+    return this.httpClient.integrationPut<GetWorkerResponse, UpdateHireDateRequest>(
+      `/workers/${workerId}/hire-date`,
+      payload,
+    );
+  }
+
+  async updateEmergencyContact(
+    workerId: string,
+    payload: UpdateEmergencyContactRequest,
+  ): Promise<GetWorkerResponse> {
+    return this.httpClient.integrationPut<GetWorkerResponse, UpdateEmergencyContactRequest>(
+      `/workers/${workerId}/emergency-contacts/default`,
+      payload,
+    );
+  }
+
+  async getPaymentHistory(query?: GetPayHistoryQuery): Promise<PaymentHistoryItem[]> {
+    const params = new URLSearchParams();
+    if (query?.workerId) params.append('workerId', query.workerId);
+    if (query?.externalWorkerId) params.append('externalWorkerId', query.externalWorkerId);
+    if (query?.page) params.append('page', query.page.toString());
+    if (query?.size) params.append('size', query.size.toString());
+
+    const queryString = params.toString();
+    return this.httpClient.coreGet<PaymentHistoryItem[]>(
+      `/workers/payment-history${queryString ? `?${queryString}` : ''}`,
+    );
+  }
+
+  async getPaymentHistoryById(paymentId: string): Promise<PaymentHistoryItem> {
+    return this.httpClient.coreGet<PaymentHistoryItem>(
+      `/workers/payment-history/${paymentId}`,
+    );
+  }
+
+  async getPayStubs(query: GetPayStubsQuery): Promise<PayStub[]> {
+    const params = new URLSearchParams();
+    if (query.workerId) params.append('workerId', query.workerId);
+    if (query.externalWorkerId) params.append('externalWorkerId', query.externalWorkerId);
+    if (query.startDate) params.append('startDate', query.startDate);
+    if (query.endDate) params.append('endDate', query.endDate);
+    if (query.page) params.append('page', query.page.toString());
+    if (query.size) params.append('size', query.size.toString());
+
+    return this.httpClient.coreGet<PayStub[]>(
+      `/pay-stubs?${params.toString()}`,
+    );
+  }
+
+  async getPayStubDownload(query: GetPayStubDownloadQuery): Promise<PayStubDownloadResponse> {
+    const params = new URLSearchParams();
+    if (query.workerId) params.append('workerId', query.workerId);
+    if (query.externalWorkerId) params.append('externalWorkerId', query.externalWorkerId);
+    params.append('date', query.date);
+
+    return this.httpClient.coreGet<PayStubDownloadResponse>(
+      `/pay-stubs/download-link?${params.toString()}`,
     );
   }
 }

@@ -7,4 +7,5 @@ export default registerAs('everee', () => ({
 
   coreBaseUrl: process.env.EVEREE_CORE_BASE_URL!,
   embedBaseUrl: process.env.EVEREE_EMBED_BASE_URL!,
+  integrationBaseUrl: process.env.EVEREE_INTEGRATION_BASE_URL!,
 }));

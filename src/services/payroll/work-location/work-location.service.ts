@@ -39,18 +39,16 @@ export class WorkLocationService {
       );
     }
 
-    // Create work location in Everee
     const evereeResponse = await this.evereeWorkLocationService.createWorkLocation({
-      externalId: dto.externalId,
       name: dto.name,
-      address: dto.address,
+      line1: dto.address,
       city: dto.city,
-      state: dto.state,
-      stateAbbreviation: dto.stateAbbreviation,
-      zipCode: dto.zipCode,
-      country: dto.country || 'US',
+      state: dto.stateAbbreviation,
+      postalCode: dto.zipCode,
       latitude: dto.latitude,
       longitude: dto.longitude,
+      effectiveDate: new Date().toISOString().split('T')[0],
+      externalId: dto.externalId,
     });
 
     // Create work location record in database
@@ -101,24 +99,6 @@ export class WorkLocationService {
 
     const location = await this.findById(id);
 
-    // Update in Everee if synced
-    if (location.evereeLocationId) {
-      await this.evereeWorkLocationService.updateWorkLocation(
-        location.evereeLocationId,
-        {
-          name: dto.name,
-          address: dto.address,
-          city: dto.city,
-          state: dto.state,
-          stateAbbreviation: dto.stateAbbreviation,
-          zipCode: dto.zipCode,
-          country: dto.country,
-          latitude: dto.latitude,
-          longitude: dto.longitude,
-        },
-      );
-    }
-
     const updated = await this.workLocationRepository.update(id, dto);
 
     this.logger.log(`Work location ${id} updated successfully`);
@@ -131,9 +111,8 @@ export class WorkLocationService {
 
     const location = await this.findById(id);
 
-    // Delete from Everee if synced
     if (location.evereeLocationId) {
-      await this.evereeWorkLocationService.deleteWorkLocation(
+      await this.evereeWorkLocationService.archiveWorkLocation(
         location.evereeLocationId,
       );
     }

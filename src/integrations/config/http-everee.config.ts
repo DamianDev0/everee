@@ -13,6 +13,7 @@ export class EvereeHttpClient {
   private readonly authorization: string;
   private readonly coreBaseUrl: string;
   private readonly embedBaseUrl: string;
+  private readonly integrationBaseUrl: string;
 
   constructor(
     private readonly http: HttpService,
@@ -22,14 +23,16 @@ export class EvereeHttpClient {
     const tenantId = this.config.get<string>('everee.tenantId');
     const coreBaseUrl = this.config.get<string>('everee.coreBaseUrl');
     const embedBaseUrl = this.config.get<string>('everee.embedBaseUrl');
+    const integrationBaseUrl = this.config.get<string>('everee.integrationBaseUrl');
 
-    if (!apiToken || !tenantId || !coreBaseUrl || !embedBaseUrl) {
+    if (!apiToken || !tenantId || !coreBaseUrl || !embedBaseUrl || !integrationBaseUrl) {
       throw new Error('Everee configuration is invalid');
     }
 
     this.tenantId = tenantId;
     this.coreBaseUrl = coreBaseUrl;
     this.embedBaseUrl = embedBaseUrl;
+    this.integrationBaseUrl = integrationBaseUrl;
     this.authorization = `Basic ${Buffer.from(apiToken).toString('base64')}`;
 
     this.logger.log(
@@ -62,6 +65,22 @@ export class EvereeHttpClient {
 
   async embedPost<T, B>(endpoint: string, body: B): Promise<T> {
     return this.request<T>('POST', this.embedBaseUrl, endpoint, body);
+  }
+
+  async integrationGet<T>(endpoint: string): Promise<T> {
+    return this.request<T>('GET', this.integrationBaseUrl, endpoint);
+  }
+
+  async integrationPost<T, B>(endpoint: string, body: B): Promise<T> {
+    return this.request<T>('POST', this.integrationBaseUrl, endpoint, body);
+  }
+
+  async integrationPut<T, B>(endpoint: string, body: B): Promise<T> {
+    return this.request<T>('PUT', this.integrationBaseUrl, endpoint, body);
+  }
+
+  async integrationDelete<T>(endpoint: string): Promise<T> {
+    return this.request<T>('DELETE', this.integrationBaseUrl, endpoint);
   }
 
   private async request<T>(
