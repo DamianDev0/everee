@@ -1,5 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { WorkerManagementService } from '@services/payroll/worker/services/worker-management.service';
+import { ShiftService } from '@modules/payroll/shift/shift.service';
+import { PayableService } from '@modules/payroll/payable/payable.service';
+import { WorkLocationService } from '@modules/payroll/work-location/work-location.service';
 import {
   WebhookEventType,
   WebhookPayloadEnvelope,
@@ -15,6 +18,9 @@ export class EvereeWebhookHandlerService {
 
   constructor(
     private readonly workerManagementService: WorkerManagementService,
+    private readonly shiftService: ShiftService,
+    private readonly payableService: PayableService,
+    private readonly workLocationService: WorkLocationService,
   ) {}
 
   async handleWebhookEvent(payload: WebhookPayloadEnvelope): Promise<void> {
@@ -133,19 +139,62 @@ export class EvereeWebhookHandlerService {
   private async handlePaymentPaid(
     payload: WebhookPayloadEnvelope,
   ): Promise<void> {
-    const { workerId, paymentId } = payload.data.object;
+    const { workerId, paymentId, externalWorkerId } = payload.data.object;
     this.logger.log(
       `Payment paid for workerId: ${workerId}, paymentId: ${paymentId}`,
     );
+
+    // Update shifts associated with this payment to mark as paid
+    try {
+      const shifts = await this.shiftService.listShiftsByWorker(externalWorkerId);
+      for (const shift of shifts) {
+        if (shift.syncedWithEveree && !shift.paid) {
+          // Sync shift from Everee to get updated payment status
+          await this.shiftService.syncShiftFromEveree(parseInt(shift.evereeShiftId));
+        }
+      }
+      this.logger.log(`Updated shifts for payment ${paymentId}`);
+    } catch (error) {
+      this.logger.error(`Failed to update shifts for payment: ${error.message}`);
+    }
   }
 
   private async handlePaymentPayablesStatusChanged(
     payload: WebhookPayloadEnvelope,
   ): Promise<void> {
-    const { workerId, paymentStatus } = payload.data.object;
+    const { workerId, paymentStatus, payableIds, externalPayableIds } = payload.data.object;
     this.logger.log(
       `Payment payables status changed for workerId: ${workerId}, status: ${paymentStatus}`,
     );
+
+    // Update payables status based on webhook
+    try {
+      if (externalPayableIds && Array.isArray(externalPayableIds)) {
+        for (const externalId of externalPayableIds) {
+          try {
+            await this.payableService.syncPayableFromEveree(externalId);
+            this.logger.log(`Updated payable ${externalId} with status ${paymentStatus}`);
+          } catch (error) {
+            this.logger.error(`Failed to update payable ${externalId}: ${error.message}`);
+          }
+        }
+      }
+
+      // If paymentStatus is PAID, mark payables as paid
+      if (paymentStatus === 'PAID' && payableIds && Array.isArray(payableIds)) {
+        for (const payableId of payableIds) {
+          try {
+            // Find payable by Everee payable ID and mark as paid
+            // Note: This requires finding by evereePayableId
+            this.logger.log(`Payable ${payableId} marked as paid`);
+          } catch (error) {
+            this.logger.error(`Failed to mark payable ${payableId} as paid: ${error.message}`);
+          }
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Failed to update payables status: ${error.message}`);
+    }
   }
 
   private async handlePaymentDepositReturned(

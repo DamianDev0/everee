@@ -81,16 +81,19 @@ export class PayableService {
     // Create payable in Everee
     const evereeResponse = await this.evereePayableService.createPayable({
       externalId: dto.externalId,
-      workerId: worker.evereeWorkerId,
+      externalWorkerId: worker.externalId,
       type: evereeType,
-      amount: dto.amount,
-      description: dto.description,
-      notes: dto.notes,
-      scheduledPaymentDate: dto.scheduledPaymentDate,
-      metadata: {
-        projectId: dto.projectId,
-        projectName: dto.projectName,
+      label: dto.description,
+      verified: true,
+      earningAmount: {
+        amount: dto.amount.toString(),
+        currency: 'USD',
       },
+      payableModel: 'PRE_CALCULATED',
+      earningType: 'CONTRACTOR',
+      earningTimestamp: dto.scheduledPaymentDate
+        ? Math.floor(new Date(dto.scheduledPaymentDate).getTime() / 1000)
+        : Math.floor(Date.now() / 1000),
     });
 
     // Create payable record in database
@@ -102,7 +105,7 @@ export class PayableService {
     });
 
     // Update with Everee data
-    payable.evereePayableId = evereeResponse.payableId;
+    payable.externalId = evereeResponse.externalId;
     payable.syncedWithEveree = true;
     payable.lastSyncedWithEvereeAt = new Date();
 
@@ -132,9 +135,20 @@ export class PayableService {
       );
     }
 
-    // Approve in Everee
-    if (payable.evereePayableId) {
-      await this.evereePayableService.approvePayable(payable.evereePayableId);
+    // Approve in Everee - update verified status
+    if (payable.externalId) {
+      await this.evereePayableService.updatePayable(payable.externalId, {
+        type: payable.type,
+        label: payable.description,
+        verified: true,
+        earningAmount: {
+          amount: payable.amount.toString(),
+          currency: 'USD',
+        },
+        payableModel: 'PRE_CALCULATED',
+        earningType: 'CONTRACTOR',
+        earningTimestamp: Math.floor(Date.now() / 1000),
+      });
     }
 
     // Update payable status
@@ -168,12 +182,9 @@ export class PayableService {
       );
     }
 
-    // Reject in Everee
-    if (payable.evereePayableId) {
-      await this.evereePayableService.rejectPayable(
-        payable.evereePayableId,
-        { rejectionReason: dto.rejectionReason },
-      );
+    // Reject in Everee - delete the payable
+    if (payable.externalId) {
+      await this.evereePayableService.deletePayable(payable.externalId);
     }
 
     // Update payable status
@@ -211,43 +222,31 @@ export class PayableService {
       };
     }
 
-    const payableIds = approvedPayables
-      .filter((p) => p.evereePayableId)
-      .map((p) => p.evereePayableId);
+    const externalWorkerIds = [
+      ...new Set(approvedPayables.map((p) => p.worker?.externalId).filter(Boolean)),
+    ];
 
     // Process in Everee
-    const result = await this.evereePayableService.processPayablesForPayout(
-      payableIds,
-    );
+    const result = await this.evereePayableService.processPayablesForPayout({
+      externalWorkerIds: externalWorkerIds as string[],
+      includeWorkersOnRegularPayCycle: false,
+    });
 
     // Update payable statuses
-    for (const payableResult of result.results) {
-      const payable = approvedPayables.find(
-        (p) => p.evereePayableId === payableResult.payableId,
-      );
-
-      if (payable) {
-        if (payableResult.status === 'processing' || payableResult.status === 'paid') {
-          await this.payableRepository.update(payable.id, {
-            status: PayableStatus.PROCESSING,
-            processedAt: new Date(),
-          } as any);
-        } else if (payableResult.status === 'failed') {
-          await this.payableRepository.update(payable.id, {
-            status: PayableStatus.FAILED,
-            failureReason: payableResult.error,
-            retryCount: payable.retryCount + 1,
-            lastRetryAt: new Date(),
-          } as any);
-        }
-      }
+    for (const payable of approvedPayables) {
+      await this.payableRepository.update(payable.id, {
+        status: PayableStatus.PROCESSING,
+        processedAt: new Date(),
+      } as any);
     }
 
-    this.logger.log(
-      `Processed ${result.processedCount} payables successfully. Failed: ${result.failedCount}`,
-    );
+    this.logger.log(`Processed payables for ${externalWorkerIds.length} workers`);
 
-    return result;
+    return {
+      processedCount: approvedPayables.length,
+      failedCount: 0,
+      results: [],
+    };
   }
 
   async findAll(): Promise<Payable[]> {

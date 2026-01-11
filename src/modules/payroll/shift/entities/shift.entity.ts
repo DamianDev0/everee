@@ -43,6 +43,9 @@ export class Shift extends CommonEntity {
   @Column({ type: 'timestamp' })
   shiftEndTime: Date;
 
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  legalWorkTimeZone: string; // Timezone from Everee (e.g., "America/New_York")
+
   @Column({ type: 'decimal', precision: 5, scale: 2 })
   totalHours: number; // Calculated
 
@@ -51,6 +54,25 @@ export class Shift extends CommonEntity {
 
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 0 })
   overtimeHours: number;
+
+  // Everee durations (ISO 8601 format strings from API)
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  shiftDurationISO: string; // e.g., "PT8H30M"
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  paidBreakDurationISO: string;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  unpaidBreakDurationISO: string;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  regularTimeWorkedISO: string;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  overtimeWorkedISO: string;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  doubleTimeWorkedISO: string;
 
   // Break Information
   @Column({ type: 'json', nullable: true })
@@ -72,11 +94,37 @@ export class Shift extends CommonEntity {
   effectiveHourlyPayRate: number; // Override default rate
 
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  displayHourlyPayRate: number; // Display rate for worker
+
+  @Column({ type: 'boolean', default: false })
+  payRateOverridden: boolean; // From Everee - indicates if pay rate was overridden
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   calculatedGrossPay: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  totalPayableAmount: number; // From Everee payableDetails
+
+  @Column({ type: 'boolean', default: false })
+  paid: boolean; // From Everee payableDetails.paid
+
+  // Classified time payable amounts from Everee
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  regularTimePayableAmount: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  overtimePayableAmount: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  doubleTimePayableAmount: number;
 
   // Workers Compensation
   @Column({ type: 'varchar', length: 20, nullable: true })
   workersCompClassCode: string; // e.g., '3220'
+
+  // Tax Configuration
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  taxCalculationConfigCode: string; // STANDARD or DIFFICULTY_OF_CARE
 
   // Status and Approval
   @Column({
@@ -97,6 +145,13 @@ export class Shift extends CommonEntity {
 
   @Column({ type: 'text', nullable: true })
   rejectionReason: string;
+
+  // Verification tracking (from Everee)
+  @Column({ type: 'timestamp', nullable: true })
+  verifiedAt: Date | null;
+
+  @Column({ type: 'integer', nullable: true })
+  verifiedByUserId: number | null; // Everee user ID who verified
 
   // Correction Tracking
   @Column({ type: 'boolean', default: false })
@@ -136,6 +191,13 @@ export class Shift extends CommonEntity {
 
   @Column({ type: 'json', nullable: true })
   metadata: Record<string, any>;
+
+  // Dimensions (from Everee - for cost tracking)
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  departmentId: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  costCenterId: string;
 
   // Sync tracking
   @Column({ type: 'timestamp', nullable: true })

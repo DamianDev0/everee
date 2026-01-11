@@ -23,7 +23,10 @@ export class WorkLocation extends CommonEntity {
   name: string;
 
   @Column({ type: 'varchar', length: 255 })
-  address: string;
+  address: string; // line1 in Everee
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  addressLine2: string; // line2 in Everee
 
   @Column({ type: 'varchar', length: 100 })
   city: string;
@@ -35,10 +38,13 @@ export class WorkLocation extends CommonEntity {
   stateAbbreviation: string; // Critical for tax calculation
 
   @Column({ type: 'varchar', length: 10 })
-  zipCode: string;
+  zipCode: string; // postalCode in Everee
 
   @Column({ type: 'varchar', length: 50, default: 'US' })
   country: string;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  phoneNumber: string; // From Everee create request
 
   // Geographic Coordinates
   @Column({ type: 'decimal', precision: 10, scale: 6, nullable: true })
@@ -46,6 +52,14 @@ export class WorkLocation extends CommonEntity {
 
   @Column({ type: 'decimal', precision: 10, scale: 6, nullable: true })
   longitude: number;
+
+  // Timezone - CRITICAL for shift time calculations
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  timeZone: string; // e.g., "America/New_York" from Everee
+
+  // Effective Date
+  @Column({ type: 'date', nullable: true })
+  effectiveDate: Date; // From Everee - when location becomes active
 
   // Tax Jurisdiction Information
   @Column({ type: 'varchar', length: 100, nullable: true })

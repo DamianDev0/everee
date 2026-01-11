@@ -14,6 +14,9 @@ export class Payable extends CommonEntity {
   @Index()
   externalId: string; // Idempotency key - CRITICAL for preventing duplicates
 
+  @Column({ type: 'integer', nullable: true })
+  evereeCompanyId: number; // From Everee response
+
   // Worker Relationship
   @Column({ type: 'uuid' })
   @Index()
@@ -39,6 +42,42 @@ export class Payable extends CommonEntity {
 
   @Column({ type: 'text', nullable: true })
   notes: string;
+
+  // Everee specific fields
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  evereePayableModel: string; // Always 'PRE_CALCULATED' from Everee
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  evereeEarningType: string; // ADVANCE, BONUS, COMMISSION, etc.
+
+  @Column({ type: 'bigint', nullable: true })
+  earningTimestamp: number; // Unix timestamp from Everee
+
+  @Column({ type: 'boolean', default: false })
+  verified: boolean; // From Everee - indicates if payable is verified
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  evereePaymentStatus: string | null; // PENDING_APPROVAL, APPROVED, PAID, CANCELLED
+
+  @Column({ type: 'integer', nullable: true })
+  evereePaymentId: number | null; // Payment ID from Everee
+
+  @Column({ type: 'integer', nullable: true })
+  evereePayablePaymentRequestId: number | null; // Payment request ID from Everee
+
+  // Unit-based payables (Everee supports unit rates)
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  unitRateAmount: number;
+
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  unitRateCurrency: string; // Usually 'USD'
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  unitCount: number; // Number of units
+
+  // Work Location for this payable
+  @Column({ type: 'integer', nullable: true })
+  evereeWorkLocationId: number;
 
   // Status and Approval
   @Column({
