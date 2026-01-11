@@ -35,9 +35,8 @@ export class WorkerMapper {
   static toOnboardingContractorRequest(
     dto: OnboardingContractorDto,
   ): OnboardingContractorRequest {
-    return {
+    const request: OnboardingContractorRequest = {
       firstName: dto.firstName,
-      middleName: dto.middleName,
       lastName: dto.lastName,
       phoneNumber: dto.phoneNumber,
       email: dto.email,
@@ -46,9 +45,13 @@ export class WorkerMapper {
         useHomeAddress: dto.legalWorkAddress.useHomeAddress,
         workLocationId: dto.legalWorkAddress.workLocationId,
       },
-      externalWorkerId: dto.externalWorkerId,
-      approvalGroupId: dto.approvalGroupId,
     };
+
+    if (dto.middleName) request.middleName = dto.middleName;
+    if (dto.externalWorkerId) request.externalWorkerId = dto.externalWorkerId;
+    if (dto.approvalGroupId) request.approvalGroupId = dto.approvalGroupId;
+
+    return request;
   }
 
   /**
@@ -57,9 +60,8 @@ export class WorkerMapper {
   static toOnboardingEmployeeRequest(
     dto: OnboardingEmployeeDto,
   ): OnboardingEmployeeRequest {
-    return {
+    const request: OnboardingEmployeeRequest = {
       firstName: dto.firstName,
-      middleName: dto.middleName,
       lastName: dto.lastName,
       phoneNumber: dto.phoneNumber,
       email: dto.email,
@@ -68,18 +70,22 @@ export class WorkerMapper {
         currency: dto.payRate.currency,
         amount: dto.payRate.amount,
       },
-      typicalWeeklyHours: dto.typicalWeeklyHours,
-      paySchedule: dto.paySchedule as any,
-      eligibleForOvertime: dto.eligibleForOvertime,
       hireDate: dto.hireDate,
       legalWorkAddress: {
         useHomeAddress: dto.legalWorkAddress.useHomeAddress,
         workLocationId: dto.legalWorkAddress.workLocationId,
       },
-      externalWorkerId: dto.externalWorkerId,
-      approvalGroupId: dto.approvalGroupId,
-      timeOffPolicyId: dto.timeOffPolicyId,
     };
+
+    if (dto.middleName) request.middleName = dto.middleName;
+    if (dto.typicalWeeklyHours) request.typicalWeeklyHours = dto.typicalWeeklyHours;
+    if (dto.paySchedule) request.paySchedule = dto.paySchedule as any;
+    if (dto.eligibleForOvertime !== undefined) request.eligibleForOvertime = dto.eligibleForOvertime;
+    if (dto.externalWorkerId) request.externalWorkerId = dto.externalWorkerId;
+    if (dto.approvalGroupId) request.approvalGroupId = dto.approvalGroupId;
+    if (dto.timeOffPolicyId) request.timeOffPolicyId = dto.timeOffPolicyId;
+
+    return request;
   }
 
   /**

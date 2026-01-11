@@ -28,16 +28,23 @@ import {
 export interface BaseWorkerResponse {
   workerId: string;
   externalWorkerId?: string;
+  userId?: number;
   firstName: string;
   middleName?: string;
   lastName: string;
   phoneNumber: string; // 10 digits
   email: string;
-  position: PositionResponse;
+  position?: PositionResponse;
   hireDate: string; // ISO8601 date
   legalWorkAddress: LegalWorkAddressResponse;
   approvalGroup?: ApprovalGroup;
   team?: Team;
+  lifecycleStatus?: LifecycleStatus;
+  onboardingStatus?: OnboardingStatus;
+  onboardingComplete?: boolean;
+  employmentType?: WorkerType;
+  fullName?: string;
+  displayFullName?: string;
 }
 
 /**

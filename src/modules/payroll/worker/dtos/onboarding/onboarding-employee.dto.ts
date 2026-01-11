@@ -16,18 +16,7 @@ import {
 import { Type } from 'class-transformer';
 import { LegalWorkAddressDto } from '../common/legal-work-address.dto';
 import { MoneyDto } from '../common/money.dto';
-
-enum PayType {
-  HOURLY = 'HOURLY',
-  SALARY = 'SALARY',
-}
-
-enum PaySchedule {
-  SEMI_MONTHLY = 'SEMI_MONTHLY',
-  BI_WEEKLY = 'BI_WEEKLY',
-  WEEKLY = 'WEEKLY',
-  DAILY = 'DAILY',
-}
+import { PaySchedule, PayType } from '@integrations/everee/interfaces';
 
 /**
  * POST /api/v2/onboarding/employee

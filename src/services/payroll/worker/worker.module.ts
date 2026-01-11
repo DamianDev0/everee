@@ -8,11 +8,22 @@ import { WorkerRepository } from '@modules/payroll/worker/repositories/worker.re
 import { EvereeHttpClient } from '@integrations/config/http-everee.config';
 import { EvereeWorkerService } from '@integrations/everee/services/everee-worker.service';
 
+import {
+  OnboardingWorkerService,
+  CompleteWorkerService,
+  EmbeddedWorkerService,
+  WorkerManagementService,
+} from './services';
+
 @Module({
   imports: [TypeOrmModule.forFeature([Worker]), HttpModule],
   controllers: [WorkerController],
   providers: [
     WorkerService,
+    OnboardingWorkerService,
+    CompleteWorkerService,
+    EmbeddedWorkerService,
+    WorkerManagementService,
     WorkerRepository,
     {
       provide: 'IWorkerRepository',
