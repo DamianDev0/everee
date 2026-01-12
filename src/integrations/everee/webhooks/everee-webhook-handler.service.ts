@@ -1,8 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { WorkerManagementService } from '@services/payroll/worker/services/worker-management.service';
-import { ShiftService } from '@modules/payroll/shift/shift.service';
-import { PayableService } from '@modules/payroll/payable/payable.service';
-import { WorkLocationService } from '@modules/payroll/work-location/work-location.service';
+
 import {
   WebhookEventType,
   WebhookPayloadEnvelope,
@@ -11,6 +9,9 @@ import {
   WorkerOnboardingLockedData,
   WorkerTinVerificationStatusChangedData,
 } from '../interfaces/webhook/webhook-event.interface';
+import { PayableService } from '@services/payroll/payable/payable.service';
+import { WorkLocationService } from '@services/payroll/work-location/work-location.service';
+import { ShiftService } from '@services/payroll/shift/shift.service';
 
 @Injectable()
 export class EvereeWebhookHandlerService {

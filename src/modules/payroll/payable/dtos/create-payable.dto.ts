@@ -52,4 +52,12 @@ export class CreatePayableDto {
   @IsDateString()
   @IsOptional()
   scheduledPaymentDate?: string;
+
+    @IsString()
+  @IsNotEmpty()
+  externalWorkerId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  evereeEarningType: string;
 }

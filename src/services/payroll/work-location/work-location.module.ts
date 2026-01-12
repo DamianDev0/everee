@@ -2,10 +2,11 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
-import { WorkLocation } from './entities/work-location.entity';
+
 import { WorkLocationService } from './work-location.service';
 import { EvereeWorkLocationService } from '@integrations/everee/services/everee-work-location.service';
 import { EvereeHttpClient } from '@integrations/config/http-everee.config';
+import { WorkLocation } from '@modules/payroll/work-location/entities/work-location.entity';
 
 @Module({
   imports: [

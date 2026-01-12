@@ -1,342 +1,382 @@
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 
-import { PaginationDto, IPaginationResponse } from '@common/dto/pagination.dto';
-import { WorkerRepository } from '@modules/payroll/worker/repositories/worker.repository';
 import { EvereePayableService } from '@integrations/everee/services/everee-payable.service';
-import { PayableRepository } from '@modules/payroll/payable/repositories/payable.repository';
-import { CreatePayableDto } from '@modules/payroll/payable/dtos/create-payable.dto';
-import { WorkerStatus, WorkerType } from '@modules/payroll/worker/enums/worker.enum';
+import {
+  CreatePayableRequest,
+  PayableResponse,
+  ProcessPayablesRequest,
+  ProcessPayablesResponse,
+} from '@integrations/everee/interfaces/payable';
+
 import { Payable } from '@modules/payroll/payable/entities/payable.entity';
 import { PayableStatus, PayableType } from '@modules/payroll/payable/enums/payable.enum';
-import { ApprovePayableDto } from '@modules/payroll/payable/dtos/approve-payable.dto';
-import { RejectPayableDto } from '@modules/payroll/payable/dtos/reject-payable.dto';
-import { UpdatePayableDto } from '@modules/payroll/payable/dtos/update-payable.dto';
 
 @Injectable()
 export class PayableService {
   private readonly logger = new Logger(PayableService.name);
 
   constructor(
-    private readonly payableRepository: PayableRepository,
-    private readonly workerRepository: WorkerRepository,
+    @InjectRepository(Payable)
+    private readonly payableRepository: Repository<Payable>,
     private readonly evereePayableService: EvereePayableService,
   ) {}
 
   /**
-   * Funcionalidad 4: Payables Management
-   * Scenario 4.1: Create contractor payment with idempotency
-   * Scenario 4.3: Create employee bonus
-   * Scenario 4.4: Prevent duplicate payments due to network failure
+   * Create payable locally and sync to Everee
+   * This is step 3 in the Everee flow
+   * Used for:
+   * - Contractors (ALL payments)
+   * - Employees (bonuses, reimbursements, commissions, etc.)
    */
-  async create(dto: CreatePayableDto): Promise<Payable> {
-    this.logger.log(`Creating payable for worker ${dto.workerId}`);
+  async createPayable(data: {
+    workerId: string;
+    externalWorkerId: string;
+    type: PayableType;
+    description: string;
+    amount: number;
+    evereeEarningType: string; // BONUS, COMMISSION, CONTRACTOR, etc.
+    verified?: boolean;
+    earningTimestamp?: Date;
+    workLocationId?: number;
+    unitRateAmount?: number;
+    unitCount?: number;
+    projectId?: string;
+    projectName?: string;
+    notes?: string;
+  }): Promise<Payable> {
+    this.logger.log(`Creating payable for worker ${data.workerId}`);
 
-    // Validate worker exists and is active
-    const worker = await this.workerRepository.findById(dto.workerId);
-    if (!worker) {
-      throw new NotFoundException(`Worker with ID ${dto.workerId} not found`);
-    }
+    // Generate deterministic external ID for idempotency
+    const externalId = `payable-${data.externalWorkerId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    if (worker.status !== WorkerStatus.ACTIVE) {
-      throw new BadRequestException(
-        `Cannot create payable. Worker ${dto.workerId} is not active. Current status: ${worker.status}`,
-      );
-    }
-
-    if (!worker.evereeWorkerId) {
-      throw new BadRequestException(
-        `Worker ${dto.workerId} has not completed Everee onboarding`,
-      );
-    }
-
-    // Validate payable type matches worker type
-    if (
-      dto.type === PayableType.CONTRACTOR_PAYMENT &&
-      worker.workerType !== WorkerType.CONTRACTOR
-    ) {
-      throw new BadRequestException(
-        `Cannot create contractor payment for W-2 employee. Use bonus or other payment type instead.`,
-      );
-    }
-
-    // Scenario 4.4: Check if externalId already exists (idempotency)
-    const existingPayable = await this.payableRepository.findByExternalId(
-      dto.externalId,
-    );
-    if (existingPayable) {
-      this.logger.warn(
-        `Payable with external ID ${dto.externalId} already exists. Returning existing payable (idempotency).`,
-      );
-      return existingPayable;
-    }
-
-    // Map PayableType to Everee payable type
-    const evereeType = this.mapPayableTypeToEveree(dto.type);
-
-    // Create payable in Everee
-    const evereeResponse = await this.evereePayableService.createPayable({
-      externalId: dto.externalId,
-      externalWorkerId: worker.externalId,
-      type: evereeType,
-      label: dto.description,
-      verified: true,
-      earningAmount: {
-        amount: dto.amount.toString(),
-        currency: 'USD',
-      },
-      payableModel: 'PRE_CALCULATED',
-      earningType: 'CONTRACTOR',
-      earningTimestamp: dto.scheduledPaymentDate
-        ? Math.floor(new Date(dto.scheduledPaymentDate).getTime() / 1000)
+    // Create local payable entity
+    const payable = this.payableRepository.create({
+      workerId: data.workerId,
+      externalId,
+      type: data.type,
+      description: data.description,
+      amount: data.amount,
+      evereeEarningType: data.evereeEarningType,
+      evereePayableModel: 'PRE_CALCULATED',
+      verified: data.verified ?? false,
+      earningTimestamp: data.earningTimestamp
+        ? Math.floor(data.earningTimestamp.getTime() / 1000)
         : Math.floor(Date.now() / 1000),
+      evereeWorkLocationId: data.workLocationId,
+      unitRateAmount: data.unitRateAmount,
+      unitRateCurrency: data.unitRateAmount ? 'USD' : undefined,
+      unitCount: data.unitCount,
+      projectId: data.projectId,
+      projectName: data.projectName,
+      notes: data.notes,
+      status: PayableStatus.PENDING_APPROVAL,
     });
 
-    // Create payable record in database
-    const payable = await this.payableRepository.create({
-      ...dto,
-      scheduledPaymentDate: dto.scheduledPaymentDate
-        ? new Date(dto.scheduledPaymentDate)
-        : undefined,
+    // Save locally first
+    const savedPayable = await this.payableRepository.save(payable);
+
+    // Sync to Everee asynchronously
+    this.syncPayableToEveree(savedPayable, data.externalWorkerId).catch(error => {
+      this.logger.error(`Failed to sync payable to Everee: ${error.message}`, error.stack);
     });
 
-    // Update with Everee data
-    payable.externalId = evereeResponse.externalId;
-    payable.syncedWithEveree = true;
-    payable.lastSyncedWithEvereeAt = new Date();
-
-    await this.payableRepository.update(payable.id, payable);
-
-    this.logger.log(`Payable created successfully: ${payable.id}`);
-
-    return payable;
+    return savedPayable;
   }
 
   /**
-   * Scenario 4.2: Approve and process contractor payment
+   * Create multiple payables in bulk
    */
-  async approve(dto: ApprovePayableDto): Promise<Payable> {
-    this.logger.log(`Approving payable ${dto.payableId}`);
+  async createPayablesBulk(
+    payables: Array<{
+      workerId: string;
+      externalWorkerId: string;
+      type: PayableType;
+      description: string;
+      amount: number;
+      evereeEarningType: string;
+      verified?: boolean;
+      workLocationId?: number;
+    }>,
+  ): Promise<Payable[]> {
+    this.logger.log(`Creating ${payables.length} payables in bulk`);
 
-    const payable = await this.payableRepository.findById(dto.payableId);
-    if (!payable) {
-      throw new NotFoundException(
-        `Payable with ID ${dto.payableId} not found`,
-      );
+    const createdPayables: Payable[] = [];
+
+    for (const data of payables) {
+      const payable = await this.createPayable(data);
+      createdPayables.push(payable);
     }
 
-    if (payable.status !== PayableStatus.PENDING_APPROVAL) {
-      throw new BadRequestException(
-        `Cannot approve payable with status ${payable.status}. Only pending payables can be approved.`,
-      );
-    }
+    return createdPayables;
+  }
 
-    // Approve in Everee - update verified status
-    if (payable.externalId) {
-      await this.evereePayableService.updatePayable(payable.externalId, {
+  /**
+   * Sync payable to Everee API
+   */
+  private async syncPayableToEveree(
+    payable: Payable,
+    externalWorkerId: string,
+  ): Promise<void> {
+    try {
+      // Prepare Everee request
+      const evereeRequest: CreatePayableRequest = {
+        externalId: payable.externalId,
+        externalWorkerId,
         type: payable.type,
         label: payable.description,
-        verified: true,
+        verified: payable.verified,
         earningAmount: {
           amount: payable.amount.toString(),
           currency: 'USD',
         },
         payableModel: 'PRE_CALCULATED',
-        earningType: 'CONTRACTOR',
-        earningTimestamp: Math.floor(Date.now() / 1000),
-      });
-    }
-
-    // Update payable status
-    const updated = await this.payableRepository.update(dto.payableId, {
-      status: PayableStatus.APPROVED,
-      approvedBy: dto.approvedBy,
-      approvedAt: new Date(),
-    } as any);
-
-    this.logger.log(`Payable ${dto.payableId} approved successfully`);
-
-    return updated;
-  }
-
-  /**
-   * Reject a payable
-   */
-  async reject(dto: RejectPayableDto): Promise<Payable> {
-    this.logger.log(`Rejecting payable ${dto.payableId}`);
-
-    const payable = await this.payableRepository.findById(dto.payableId);
-    if (!payable) {
-      throw new NotFoundException(
-        `Payable with ID ${dto.payableId} not found`,
-      );
-    }
-
-    if (payable.status !== PayableStatus.PENDING_APPROVAL) {
-      throw new BadRequestException(
-        `Cannot reject payable with status ${payable.status}. Only pending payables can be rejected.`,
-      );
-    }
-
-    // Reject in Everee - delete the payable
-    if (payable.externalId) {
-      await this.evereePayableService.deletePayable(payable.externalId);
-    }
-
-    // Update payable status
-    const updated = await this.payableRepository.update(dto.payableId, {
-      status: PayableStatus.REJECTED,
-      rejectedBy: dto.rejectedBy,
-      rejectedAt: new Date(),
-      rejectionReason: dto.rejectionReason,
-    } as any);
-
-    this.logger.log(`Payable ${dto.payableId} rejected successfully`);
-
-    return updated;
-  }
-
-  /**
-   * Scenario 4.2: Process approved payables for payout
-   * Only processes approved payables
-   */
-  async processApprovedPayables(): Promise<{
-    processedCount: number;
-    failedCount: number;
-    results: any[];
-  }> {
-    this.logger.log('Processing approved payables for payout');
-
-    const approvedPayables = await this.payableRepository.findApprovedAndUnprocessed();
-
-    if (approvedPayables.length === 0) {
-      this.logger.log('No approved payables to process');
-      return {
-        processedCount: 0,
-        failedCount: 0,
-        results: [],
+        earningType: payable.evereeEarningType as any,
+        earningTimestamp: payable.earningTimestamp,
+        workLocationId: payable.evereeWorkLocationId,
+        unitRate: payable.unitRateAmount
+          ? {
+              amount: payable.unitRateAmount.toString(),
+              currency: payable.unitRateCurrency || 'USD',
+            }
+          : undefined,
+        unitCount: payable.unitCount,
       };
+
+      // Call Everee API
+      const response = await this.evereePayableService.createPayable(evereeRequest);
+
+      // Update local entity with Everee response
+      await this.updatePayableFromEvereeResponse(payable.id, response);
+
+      this.logger.log(`Successfully synced payable ${payable.id} to Everee`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to sync payable ${payable.id} to Everee: ${error.message}`,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Update local payable entity with data from Everee response
+   */
+  async updatePayableFromEvereeResponse(
+    payableId: string,
+    response: PayableResponse,
+  ): Promise<Payable> {
+    const payable = await this.payableRepository.findOne({
+      where: { id: payableId },
+    });
+    if (!payable) {
+      throw new NotFoundException(`Payable ${payableId} not found`);
     }
 
-    const externalWorkerIds = [
-      ...new Set(approvedPayables.map((p) => p.worker?.externalId).filter(Boolean)),
-    ];
+    // Map Everee response to local entity
+    payable.evereeCompanyId = response.companyId;
+    payable.verified = response.verified;
+    payable.evereePaymentStatus = response.paymentStatus || null;
+    payable.evereePaymentId = response.paymentId || null;
+    payable.evereePayablePaymentRequestId = response.payablePaymentRequestId || null;
 
-    // Process in Everee
-    const result = await this.evereePayableService.processPayablesForPayout({
-      externalWorkerIds: externalWorkerIds as string[],
-      includeWorkersOnRegularPayCycle: false,
+    // Update sync tracking
+    payable.syncedWithEveree = true;
+    payable.lastSyncedWithEvereeAt = new Date();
+
+    // Map Everee payment status to local status
+    if (response.paymentStatus === 'PAID') {
+      payable.status = PayableStatus.PAID;
+      payable.paidAt = new Date();
+    } else if (response.paymentStatus === 'APPROVED') {
+      payable.status = PayableStatus.APPROVED;
+      payable.approvedAt = new Date();
+    } else if (response.paymentStatus === 'PENDING_APPROVAL') {
+      payable.status = PayableStatus.PENDING_APPROVAL;
+    } else if (response.paymentStatus === 'CANCELLED') {
+      payable.status = PayableStatus.REJECTED;
+    }
+
+    return this.payableRepository.save(payable);
+  }
+
+  /**
+   * Process payables for payout (Step 4 in Everee flow)
+   * For CONTRACTORS: Always required
+   * For EMPLOYEES: Only for off-cycle/immediate payments
+   */
+  async processPayablesForPayout(data: {
+    externalWorkerIds: string[];
+    includeWorkersOnRegularPayCycle?: boolean; // Set to true for employees doing off-cycle
+  }): Promise<ProcessPayablesResponse> {
+    this.logger.log(`Processing payables for payout: ${data.externalWorkerIds.join(', ')}`);
+
+    const request: ProcessPayablesRequest = {
+      externalWorkerIds: data.externalWorkerIds,
+      includeWorkersOnRegularPayCycle: data.includeWorkersOnRegularPayCycle ?? false,
+    };
+
+    const response = await this.evereePayableService.processPayablesForPayout(request);
+
+    this.logger.log(`Successfully processed payables for payout`);
+
+    return response;
+  }
+
+  /**
+   * Get payable by ID
+   */
+  async getPayableById(id: string): Promise<Payable> {
+    const payable = await this.payableRepository.findOne({
+      where: { id },
+      relations: ['worker'],
     });
 
-    // Update payable statuses
-    for (const payable of approvedPayables) {
-      await this.payableRepository.update(payable.id, {
-        status: PayableStatus.PROCESSING,
-        processedAt: new Date(),
-      } as any);
-    }
-
-    this.logger.log(`Processed payables for ${externalWorkerIds.length} workers`);
-
-    return {
-      processedCount: approvedPayables.length,
-      failedCount: 0,
-      results: [],
-    };
-  }
-
-  async findAll(): Promise<Payable[]> {
-    return this.payableRepository.findAll();
-  }
-
-  async findById(id: string): Promise<Payable> {
-    const payable = await this.payableRepository.findById(id);
-
     if (!payable) {
-      throw new NotFoundException(`Payable with ID ${id} not found`);
+      throw new NotFoundException(`Payable ${id} not found`);
     }
 
     return payable;
   }
 
-  async findByWorkerId(workerId: string): Promise<Payable[]> {
-    return this.payableRepository.findByWorkerId(workerId);
-  }
+  /**
+   * Get payable by external ID
+   */
+  async getPayableByExternalId(externalId: string): Promise<Payable> {
+    const payable = await this.payableRepository.findOne({
+      where: { externalId },
+      relations: ['worker'],
+    });
 
-  async findPendingApproval(): Promise<Payable[]> {
-    return this.payableRepository.findPendingApproval();
-  }
-
-  async findWithPagination(
-    paginationDto: PaginationDto,
-  ): Promise<IPaginationResponse<Payable>> {
-    return this.payableRepository.findWithPagination(paginationDto);
-  }
-
-  async update(id: string, dto: UpdatePayableDto): Promise<Payable> {
-    this.logger.log(`Updating payable ${id}`);
-
-    const payable = await this.findById(id);
-
-    // Don't allow updates if already processed
-    if (payable.status === PayableStatus.PAID || payable.processedAt) {
-      throw new BadRequestException(
-        'Cannot update payable that has already been processed',
-      );
+    if (!payable) {
+      throw new NotFoundException(`Payable with external ID ${externalId} not found`);
     }
 
-    const updated = await this.payableRepository.update(id, {
-      ...dto,
-      scheduledPaymentDate: dto.scheduledPaymentDate
-        ? new Date(dto.scheduledPaymentDate)
-        : undefined,
-    } as any);
-
-    this.logger.log(`Payable ${id} updated successfully`);
-
-    return updated;
+    return payable;
   }
 
-  async delete(id: string): Promise<void> {
-    this.logger.log(`Deleting payable ${id}`);
-
-    const payable = await this.findById(id);
-
-    // Don't allow deletion if already processed
-    if (payable.status === PayableStatus.PAID || payable.processedAt) {
-      throw new BadRequestException(
-        'Cannot delete payable that has already been processed',
-      );
-    }
-
-    // Delete from Everee if synced
-    if (payable.evereePayableId) {
-      await this.evereePayableService.deletePayable(payable.evereePayableId);
-    }
-
-    await this.payableRepository.delete(id);
-
-    this.logger.log(`Payable ${id} deleted successfully`);
+  /**
+   * List payables for a worker
+   */
+  async listPayablesByWorker(workerId: string): Promise<Payable[]> {
+    return this.payableRepository.find({
+      where: { workerId },
+      relations: ['worker'],
+      order: { createdAt: 'DESC' },
+    });
   }
 
-  private mapPayableTypeToEveree(
-    type: PayableType,
-  ): 'contractor_payment' | 'bonus' | 'reimbursement' | 'commission' | 'other' {
-    switch (type) {
-      case PayableType.CONTRACTOR_PAYMENT:
-        return 'contractor_payment';
-      case PayableType.BONUS:
-        return 'bonus';
-      case PayableType.REIMBURSEMENT:
-        return 'reimbursement';
-      case PayableType.COMMISSION:
-        return 'commission';
-      default:
-        return 'other';
+  /**
+   * List unpaid payables for a worker
+   */
+  async listUnpaidPayablesByWorker(workerId: string): Promise<Payable[]> {
+    return this.payableRepository.find({
+      where: {
+        workerId,
+        status: PayableStatus.PENDING_APPROVAL,
+      },
+      relations: ['worker'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  /**
+   * Update payable
+   */
+  async updatePayable(
+    id: string,
+    data: Partial<{
+      amount: number;
+      description: string;
+      verified: boolean;
+      status: PayableStatus;
+      notes: string;
+    }>,
+  ): Promise<Payable> {
+    const payable = await this.getPayableById(id);
+
+    Object.assign(payable, data);
+
+    const updatedPayable = await this.payableRepository.save(payable);
+
+    // If synced to Everee, update there as well
+    if (
+      payable.syncedWithEveree &&
+      payable.externalId &&
+      (data.description || data.verified !== undefined || data.amount)
+    ) {
+      try {
+        await this.evereePayableService.updatePayable(payable.externalId, {
+          type: payable.type,
+          label: data.description ?? payable.description,
+          verified: data.verified ?? payable.verified,
+          earningAmount: {
+            amount: (data.amount ?? payable.amount).toString(),
+            currency: 'USD',
+          },
+          payableModel: 'PRE_CALCULATED',
+          earningType: payable.evereeEarningType as any,
+          earningTimestamp: payable.earningTimestamp,
+        });
+      } catch (error) {
+        this.logger.error(`Failed to update payable in Everee: ${error.message}`);
+      }
     }
+
+    return updatedPayable;
+  }
+
+  /**
+   * Delete payable (also deletes from Everee if synced)
+   */
+  async deletePayable(id: string): Promise<void> {
+    const payable = await this.getPayableById(id);
+
+    // If synced to Everee, delete there first
+    if (payable.syncedWithEveree && payable.externalId) {
+      try {
+        await this.evereePayableService.deletePayable(payable.externalId);
+      } catch (error) {
+        this.logger.error(`Failed to delete payable from Everee: ${error.message}`);
+        throw error;
+      }
+    }
+
+    await this.payableRepository.remove(payable);
+  }
+
+  /**
+   * Sync payable from Everee (when receiving webhook)
+   */
+  async syncPayableFromEveree(externalId: string): Promise<Payable | null> {
+    const response = await this.evereePayableService.getPayable(externalId);
+
+    // Find local payable by externalId
+    let payable = await this.payableRepository.findOne({
+      where: { externalId },
+    });
+
+    if (payable) {
+      // Update existing payable
+      return this.updatePayableFromEvereeResponse(payable.id, response);
+    }
+
+    // If not found, this might be a new payable created outside our system
+    this.logger.warn(`Payable ${externalId} not found locally, skipping sync`);
+    return null;
+  }
+
+  /**
+   * Mark payable as paid (from webhook)
+   */
+  async markPayableAsPaid(externalId: string, paymentId: number): Promise<Payable> {
+    const payable = await this.getPayableByExternalId(externalId);
+
+    payable.status = PayableStatus.PAID;
+    payable.paidAt = new Date();
+    payable.evereePaymentId = paymentId;
+    payable.evereePaymentStatus = 'PAID';
+
+    return this.payableRepository.save(payable);
   }
 }

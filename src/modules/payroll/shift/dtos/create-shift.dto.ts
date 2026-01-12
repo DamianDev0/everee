@@ -29,7 +29,6 @@ export class ShiftBreakDto {
   endTime: string;
 
   @IsNumber()
-  @IsNotEmpty()
   @Min(0)
   durationMinutes: number;
 }
@@ -39,9 +38,13 @@ export class CreateShiftDto {
   @IsNotEmpty()
   workerId: string;
 
+  @IsString()
+  @IsNotEmpty()
+  externalWorkerId: string;
+
   @IsUUID()
   @IsOptional()
-  workLocationId?: string; // CRITICAL for staffing industry
+  workLocationId?: string;
 
   @IsDateString()
   @IsNotEmpty()
@@ -60,17 +63,12 @@ export class CreateShiftDto {
   @IsNumber()
   @IsOptional()
   @Min(0)
-  effectiveHourlyPayRate?: number; // Override default rate for this shift
+  effectiveHourlyPayRate?: number;
 
   @IsString()
   @IsOptional()
   @MaxLength(20)
-  workersCompClassCode?: string; // e.g., '3220'
-
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(255)
-  externalId: string; // Idempotency key - must be deterministic
+  workersCompClassCode?: string;
 
   @IsString()
   @IsOptional()
@@ -86,7 +84,6 @@ export class CreateShiftDto {
   @IsOptional()
   notes?: string;
 
-  // Correction fields
   @IsBoolean()
   @IsOptional()
   isCorrection?: boolean;
