@@ -7,6 +7,7 @@ import { ShiftService } from './shift.service';
 import { EvereeShiftService } from '@integrations/everee/services/everee-shift.service';
 import { EvereeHttpClient } from '@integrations/config/http-everee.config';
 import { Shift } from '@modules/payroll/shift/entities/shift.entity';
+import { ShiftController } from './shift.controller';
 
 @Module({
   imports: [
@@ -16,5 +17,6 @@ import { Shift } from '@modules/payroll/shift/entities/shift.entity';
   ],
   providers: [ShiftService, EvereeShiftService, EvereeHttpClient],
   exports: [ShiftService],
+  controllers: [ShiftController],
 })
 export class ShiftModule {}

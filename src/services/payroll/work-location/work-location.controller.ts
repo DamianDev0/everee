@@ -11,7 +11,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 
-import { PaginationDto } from '@common/dto/pagination.dto';
+
 import { CreateWorkLocationDto } from '@modules/payroll/work-location/dtos/create-work-location.dto';
 import { UpdateWorkLocationDto } from '@modules/payroll/work-location/dtos/update-work-location.dto';
 import { WorkLocationService } from './work-location.service';
@@ -35,10 +35,6 @@ export class WorkLocationController {
     );
   }
 
-  @Get('client/:clientId')
-  async findByClient(@Param('clientId') clientId: string) {
-    return this.workLocationService.listWorkLocationsByClient(clientId);
-  }
 
   @Get(':id')
   async findById(@Param('id') id: string) {

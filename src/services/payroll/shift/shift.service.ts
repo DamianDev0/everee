@@ -3,7 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { EvereeShiftService } from '@integrations/everee/services/everee-shift.service';
-import { CreateShiftRequest, ShiftResponse } from '@integrations/everee/interfaces/shift';
+import {
+  CreateShiftRequest,
+  ShiftResponse,
+} from '@integrations/everee/interfaces/shift';
 import { Shift } from '@modules/payroll/shift/entities/shift.entity';
 import { ShiftStatus } from '@modules/payroll/shift/enums/shift.enum';
 
@@ -17,10 +20,6 @@ export class ShiftService {
     private readonly evereeShiftService: EvereeShiftService,
   ) {}
 
-  /**
-   * Create shift locally and sync to Everee
-   * This is step 2 in the Everee flow (after worker creation)
-   */
   async createShift(data: {
     workerId: string;
     externalWorkerId: string;
@@ -40,10 +39,8 @@ export class ShiftService {
   }): Promise<Shift> {
     this.logger.log(`Creating shift for worker ${data.workerId}`);
 
-    // Generate deterministic external ID for idempotency
     const externalId = `shift-${data.externalWorkerId}-${data.shiftStartTime.getTime()}`;
 
-    // Create local shift entity
     const shift = this.shiftRepository.create({
       workerId: data.workerId,
       externalId,
@@ -62,12 +59,13 @@ export class ShiftService {
       status: ShiftStatus.DRAFT,
     });
 
-    // Save locally first
     const savedShift = await this.shiftRepository.save(shift);
 
-    // Sync to Everee asynchronously
-    this.syncShiftToEveree(savedShift, data.externalWorkerId).catch(error => {
-      this.logger.error(`Failed to sync shift to Everee: ${error.message}`, error.stack);
+    this.syncShiftToEveree(savedShift, data.externalWorkerId).catch((error) => {
+      this.logger.error(
+        `Failed to sync shift to Everee: ${error.message}`,
+        error.stack,
+      );
     });
 
     return savedShift;
@@ -76,12 +74,16 @@ export class ShiftService {
   /**
    * Sync shift to Everee API
    */
-  private async syncShiftToEveree(shift: Shift, externalWorkerId: string): Promise<void> {
+  private async syncShiftToEveree(
+    shift: Shift,
+    externalWorkerId: string,
+  ): Promise<void> {
     try {
-      // Prepare Everee request
       const evereeRequest: CreateShiftRequest = {
         externalWorkerId,
-        shiftStartEpochSeconds: Math.floor(shift.shiftStartTime.getTime() / 1000),
+        shiftStartEpochSeconds: Math.floor(
+          shift.shiftStartTime.getTime() / 1000,
+        ),
         shiftEndEpochSeconds: Math.floor(shift.shiftEndTime.getTime() / 1000),
         effectiveHourlyPayRate: shift.effectiveHourlyPayRate
           ? { amount: shift.effectiveHourlyPayRate.toString(), currency: 'USD' }
@@ -99,15 +101,15 @@ export class ShiftService {
         note: shift.notes,
       };
 
-      // Call Everee API
       const response = await this.evereeShiftService.createShift(evereeRequest);
 
-      // Update local entity with Everee response
       await this.updateShiftFromEvereeResponse(shift.id, response);
 
       this.logger.log(`Successfully synced shift ${shift.id} to Everee`);
     } catch (error) {
-      this.logger.error(`Failed to sync shift ${shift.id} to Everee: ${error.message}`);
+      this.logger.error(
+        `Failed to sync shift ${shift.id} to Everee: ${error.message}`,
+      );
       throw error;
     }
   }
@@ -119,43 +121,53 @@ export class ShiftService {
     shiftId: string,
     response: ShiftResponse,
   ): Promise<Shift> {
-    const shift = await this.shiftRepository.findOne({ where: { id: shiftId } });
+    const shift = await this.shiftRepository.findOne({
+      where: { id: shiftId },
+    });
     if (!shift) {
       throw new NotFoundException(`Shift ${shiftId} not found`);
     }
 
-    // Map Everee response to local entity
     shift.evereeShiftId = response.workedShiftId.toString();
     shift.legalWorkTimeZone = response.legalWorkTimeZone;
-    shift.verifiedAt = response.verifiedAt ? new Date(response.verifiedAt) : null;
+    shift.verifiedAt = response.verifiedAt
+      ? new Date(response.verifiedAt)
+      : null;
     shift.verifiedByUserId = response.verifiedByUserId ?? null;
     shift.payRateOverridden = response.payRateOverridden;
-    shift.effectiveHourlyPayRate = parseFloat(response.effectivePayRate.amount as string);
+    shift.effectiveHourlyPayRate = parseFloat(
+      response.effectivePayRate.amount as string,
+    );
 
-    // Update payable details
-    shift.totalPayableAmount = parseFloat(response.payableDetails.totalPayableAmount.amount as string);
+    shift.totalPayableAmount = parseFloat(
+      response.payableDetails.totalPayableAmount.amount as string,
+    );
     shift.paid = response.payableDetails.paid;
 
     // Update durations (ISO 8601 format)
     shift.shiftDurationISO = response.shiftDurations.shiftDuration;
     shift.paidBreakDurationISO = response.shiftDurations.paidBreakDuration;
     shift.unpaidBreakDurationISO = response.shiftDurations.unpaidBreakDuration;
-    shift.regularTimeWorkedISO = response.shiftDurations.regularTimeWorked.totalDuration;
-    shift.overtimeWorkedISO = response.shiftDurations.overtimeWorked.totalDuration;
-    shift.doubleTimeWorkedISO = response.shiftDurations.doubleTimeWorked.totalDuration;
+    shift.regularTimeWorkedISO =
+      response.shiftDurations.regularTimeWorked.totalDuration;
+    shift.overtimeWorkedISO =
+      response.shiftDurations.overtimeWorked.totalDuration;
+    shift.doubleTimeWorkedISO =
+      response.shiftDurations.doubleTimeWorked.totalDuration;
 
-    // Update payable amounts by classification
     shift.regularTimePayableAmount = parseFloat(
-      response.shiftDurations.regularTimeWorked.totalPayableAmount.amount as string,
+      response.shiftDurations.regularTimeWorked.totalPayableAmount
+        .amount as string,
     );
     shift.overtimePayableAmount = parseFloat(
-      response.shiftDurations.overtimeWorked.totalPayableAmount.amount as string,
+      response.shiftDurations.overtimeWorked.totalPayableAmount
+        .amount as string,
     );
     shift.doubleTimePayableAmount = parseFloat(
-      response.shiftDurations.doubleTimeWorked.totalPayableAmount.amount as string,
+      response.shiftDurations.doubleTimeWorked.totalPayableAmount
+        .amount as string,
     );
 
-    // Update sync tracking
     shift.syncedWithEveree = true;
     shift.lastSyncedWithEvereeAt = new Date();
     shift.status = ShiftStatus.SUBMITTED;
@@ -163,9 +175,6 @@ export class ShiftService {
     return this.shiftRepository.save(shift);
   }
 
-  /**
-   * Get shift by ID
-   */
   async getShiftById(id: string): Promise<Shift> {
     const shift = await this.shiftRepository.findOne({
       where: { id },
@@ -179,9 +188,6 @@ export class ShiftService {
     return shift;
   }
 
-  /**
-   * List shifts for a worker
-   */
   async listShiftsByWorker(workerId: string): Promise<Shift[]> {
     return this.shiftRepository.find({
       where: { workerId },
@@ -193,7 +199,10 @@ export class ShiftService {
   /**
    * List shifts for a date range
    */
-  async listShiftsByDateRange(startDate: Date, endDate: Date): Promise<Shift[]> {
+  async listShiftsByDateRange(
+    startDate: Date,
+    endDate: Date,
+  ): Promise<Shift[]> {
     return this.shiftRepository
       .createQueryBuilder('shift')
       .where('shift.shiftStartTime >= :startDate', { startDate })
@@ -229,7 +238,6 @@ export class ShiftService {
   async deleteShift(id: string, correctionAuthorized = false): Promise<void> {
     const shift = await this.getShiftById(id);
 
-    // If synced to Everee, delete there first
     if (shift.syncedWithEveree && shift.evereeShiftId) {
       try {
         await this.evereeShiftService.deleteShift(
@@ -237,7 +245,9 @@ export class ShiftService {
           correctionAuthorized,
         );
       } catch (error) {
-        this.logger.error(`Failed to delete shift from Everee: ${error.message}`);
+        this.logger.error(
+          `Failed to delete shift from Everee: ${error.message}`,
+        );
         throw error;
       }
     }
@@ -251,17 +261,14 @@ export class ShiftService {
   async syncShiftFromEveree(evereeShiftId: number): Promise<Shift | null> {
     const response = await this.evereeShiftService.getShift(evereeShiftId);
 
-    // Find local shift by evereeShiftId
     let shift = await this.shiftRepository.findOne({
       where: { evereeShiftId: evereeShiftId.toString() },
     });
 
     if (shift) {
-      // Update existing shift
       return this.updateShiftFromEvereeResponse(shift.id, response);
     }
 
-    // If not found, this might be a new shift created outside our system
     this.logger.warn(`Shift ${evereeShiftId} not found locally, skipping sync`);
     return null;
   }
