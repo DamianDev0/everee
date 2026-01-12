@@ -10,11 +10,9 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-
-
-import { CreateWorkLocationDto } from '@modules/payroll/work-location/dtos/create-work-location.dto';
-import { UpdateWorkLocationDto } from '@modules/payroll/work-location/dtos/update-work-location.dto';
+import { CreateWorkLocationDto, UpdateWorkLocationDto } from '@modules/payroll/work-location/dtos';
 import { WorkLocationService } from './work-location.service';
+import { PaginationDto } from '@common/dto/pagination.dto';
 
 @Controller('payroll/work-locations')
 export class WorkLocationController {
@@ -29,12 +27,25 @@ export class WorkLocationController {
   @Get()
   async findAll(
     @Query('includeInactive') includeInactive?: string,
+    @Query() paginationDto?: PaginationDto,
   ) {
+    if (paginationDto?.page && paginationDto?.limit) {
+      return this.workLocationService.findWithPagination(paginationDto);
+    }
     return this.workLocationService.listWorkLocations(
       includeInactive === 'true',
     );
   }
 
+  @Get('state/:stateAbbreviation')
+  async findByState(@Param('stateAbbreviation') stateAbbreviation: string) {
+    return this.workLocationService.findByState(stateAbbreviation);
+  }
+
+  @Get('external/:externalId')
+  async findByExternalId(@Param('externalId') externalId: string) {
+    return this.workLocationService.findByExternalId(externalId);
+  }
 
   @Get(':id')
   async findById(@Param('id') id: string) {

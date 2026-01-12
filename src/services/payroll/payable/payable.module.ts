@@ -7,7 +7,9 @@ import { EvereePayableService } from '@integrations/everee/services/everee-payab
 import { EvereeHttpClient } from '@integrations/config/http-everee.config';
 import { PayableService } from './payable.service';
 import { Payable } from '@modules/payroll/payable/entities/payable.entity';
+import { PayableRepository } from '@modules/payroll/payable/repositories/payable.repository';
 import { PayableController } from './payable.controller';
+import { PayableCreationService, PayableManagementService } from './services';
 
 @Module({
   imports: [
@@ -15,8 +17,19 @@ import { PayableController } from './payable.controller';
     HttpModule,
     ConfigModule,
   ],
-  providers: [PayableService, EvereePayableService, EvereeHttpClient],
-  exports: [PayableService],
+  providers: [
+    PayableService,
+    PayableCreationService,
+    PayableManagementService,
+    PayableRepository,
+    {
+      provide: 'IPayableRepository',
+      useClass: PayableRepository,
+    },
+    EvereePayableService,
+    EvereeHttpClient,
+  ],
+  exports: [PayableService, PayableRepository, PayableManagementService],
   controllers: [PayableController],
 })
 export class PayableModule {}

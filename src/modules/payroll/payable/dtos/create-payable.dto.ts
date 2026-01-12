@@ -60,4 +60,5 @@ export class CreatePayableDto {
   @IsString()
   @IsNotEmpty()
   evereeEarningType: string;
+
 }

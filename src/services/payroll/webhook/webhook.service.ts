@@ -1,6 +1,5 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
-import { ConfigService } from '@nestjs/config';
 import { WorkerService } from '../worker/worker.service';
 
 export enum EvereeWebhookEventType {

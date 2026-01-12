@@ -7,7 +7,9 @@ import { ShiftService } from './shift.service';
 import { EvereeShiftService } from '@integrations/everee/services/everee-shift.service';
 import { EvereeHttpClient } from '@integrations/config/http-everee.config';
 import { Shift } from '@modules/payroll/shift/entities/shift.entity';
+import { ShiftRepository } from '@modules/payroll/shift/repositories/shift.repository';
 import { ShiftController } from './shift.controller';
+import { ShiftCreationService, ShiftManagementService } from './services';
 
 @Module({
   imports: [
@@ -15,8 +17,19 @@ import { ShiftController } from './shift.controller';
     HttpModule,
     ConfigModule,
   ],
-  providers: [ShiftService, EvereeShiftService, EvereeHttpClient],
-  exports: [ShiftService],
+  providers: [
+    ShiftService,
+    ShiftCreationService,
+    ShiftManagementService,
+    ShiftRepository,
+    {
+      provide: 'IShiftRepository',
+      useClass: ShiftRepository,
+    },
+    EvereeShiftService,
+    EvereeHttpClient,
+  ],
+  exports: [ShiftService, ShiftRepository, ShiftManagementService],
   controllers: [ShiftController],
 })
 export class ShiftModule {}

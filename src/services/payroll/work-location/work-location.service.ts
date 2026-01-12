@@ -1,132 +1,66 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-
-import { EvereeWorkLocationService } from '@integrations/everee/services/everee-work-location.service';
-import {
-  CreateWorkLocationRequest,
-  WorkLocationResponse,
-} from '@integrations/everee/interfaces/work-location';
-
+import { Injectable } from '@nestjs/common';
 import { WorkLocation } from '@modules/payroll/work-location/entities/work-location.entity';
-import { CreateWorkLocationDto } from '@modules/payroll/work-location/dtos/create-work-location.dto';
-
+import { PaginationDto, IPaginationResponse } from '@common/dto/pagination.dto';
+import { CreateWorkLocationDto, UpdateWorkLocationDto } from '@modules/payroll/work-location/dtos';
+import { WorkLocationResponse } from '@integrations/everee/interfaces/work-location';
+import { WorkLocationCreationService, WorkLocationManagementService } from './services';
 
 @Injectable()
 export class WorkLocationService {
-  private readonly logger = new Logger(WorkLocationService.name);
-
   constructor(
-    @InjectRepository(WorkLocation)
-    private readonly workLocationRepository: Repository<WorkLocation>,
-    private readonly evereeWorkLocationService: EvereeWorkLocationService,
+    private readonly creationService: WorkLocationCreationService,
+    private readonly managementService: WorkLocationManagementService,
   ) {}
 
   async createWorkLocation(
     dto: CreateWorkLocationDto,
-  ): Promise<WorkLocation> {
-    const evereeResponse = await this.createInEveree(dto);
-
-    const workLocation = this.workLocationRepository.create({
-      name: dto.name,
-      address: dto.address,
-      city: dto.city,
-      state: dto.state,
-      stateAbbreviation: dto.stateAbbreviation,
-      zipCode: dto.zipCode,
-      country: dto.country ?? 'US',
-      latitude: evereeResponse.latitude ?? dto.latitude,
-      longitude: evereeResponse.longitude ?? dto.longitude,
-      externalId: dto.externalId,
-      evereeLocationId: evereeResponse.id.toString(),
-      timeZone: evereeResponse.timeZone,
-      clientName: dto.clientName,
-      clientId: dto.clientId,
-      notes: dto.notes,
-      isActive: dto.isActive ?? true,
-      syncedWithEveree: true,
-      lastSyncedWithEvereeAt: new Date(),
-    });
-
-    return this.workLocationRepository.save(workLocation);
+  ): Promise<{ workLocation: WorkLocation; evereeResponse: WorkLocationResponse }> {
+    return this.creationService.createWorkLocation(dto);
   }
 
-  private async createInEveree(
-    dto: CreateWorkLocationDto,
-  ): Promise<WorkLocationResponse> {
-    const request: CreateWorkLocationRequest = {
-      name: dto.name,
-      line1: dto.address,
-      city: dto.city,
-      state: dto.stateAbbreviation,
-      postalCode: dto.zipCode,
-      latitude: dto.latitude,
-      longitude: dto.longitude,
-      effectiveDate: new Date().toISOString().split('T')[0],
-      externalId: dto.externalId,
-    };
-
-    return this.evereeWorkLocationService.createWorkLocation(request);
+  async getWorkLocationFromEveree(locationId: string): Promise<WorkLocationResponse> {
+    return this.managementService.getWorkLocationFromEveree(locationId);
   }
 
-  async getWorkLocationById(id: string): Promise<WorkLocation> {
-    const workLocation = await this.workLocationRepository.findOne({
-      where: { id },
-    });
-
-    if (!workLocation) {
-      throw new NotFoundException(`Work location ${id} not found`);
-    }
-
-    return workLocation;
-  }
-
-  async getWorkLocationByEvereeId(
-    evereeLocationId: string,
-  ): Promise<WorkLocation> {
-    const workLocation = await this.workLocationRepository.findOne({
-      where: { evereeLocationId },
-    });
-
-    if (!workLocation) {
-      throw new NotFoundException(
-        `Work location with Everee ID ${evereeLocationId} not found`,
-      );
-    }
-
-    return workLocation;
-  }
-
-  async listWorkLocations(includeInactive = false): Promise<WorkLocation[]> {
-    const query =
-      this.workLocationRepository.createQueryBuilder('workLocation');
-
-    if (!includeInactive) {
-      query.where('workLocation.isActive = :isActive', { isActive: true });
-    }
-
-    return query.orderBy('workLocation.name', 'ASC').getMany();
-  }
-
-  async updateWorkLocation(
-    id: string,
-    data: Partial<WorkLocation>,
-  ): Promise<WorkLocation> {
-    const workLocation = await this.getWorkLocationById(id);
-    Object.assign(workLocation, data);
-    return this.workLocationRepository.save(workLocation);
+  async updateWorkLocation(id: string, dto: UpdateWorkLocationDto): Promise<WorkLocation> {
+    return this.managementService.updateWorkLocation(id, dto);
   }
 
   async archiveWorkLocation(id: string): Promise<WorkLocation> {
-    const workLocation = await this.getWorkLocationById(id);
-    workLocation.isActive = false;
+    return this.managementService.archiveWorkLocation(id);
+  }
 
-    if (workLocation.syncedWithEveree && workLocation.evereeLocationId) {
-      await this.evereeWorkLocationService.archiveWorkLocation(
-        workLocation.evereeLocationId,
-      );
-    }
+  async findAll(includeInactive = false): Promise<WorkLocation[]> {
+    return this.managementService.findAll(includeInactive);
+  }
 
-    return this.workLocationRepository.save(workLocation);
+  async findById(id: string): Promise<WorkLocation> {
+    return this.managementService.findById(id);
+  }
+
+  async findByExternalId(externalId: string): Promise<WorkLocation> {
+    return this.managementService.findByExternalId(externalId);
+  }
+
+  async findByEvereeLocationId(evereeLocationId: string): Promise<WorkLocation> {
+    return this.managementService.findByEvereeLocationId(evereeLocationId);
+  }
+
+  async findByState(stateAbbreviation: string): Promise<WorkLocation[]> {
+    return this.managementService.findByState(stateAbbreviation);
+  }
+
+  async findWithPagination(
+    paginationDto: PaginationDto,
+  ): Promise<IPaginationResponse<WorkLocation>> {
+    return this.managementService.findWithPagination(paginationDto);
+  }
+
+  async listWorkLocations(includeInactive = false): Promise<WorkLocation[]> {
+    return this.managementService.findAll(includeInactive);
+  }
+
+  async getWorkLocationById(id: string): Promise<WorkLocation> {
+    return this.managementService.findById(id);
   }
 }

@@ -10,9 +10,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-
-import { CreateShiftDto } from '@modules/payroll/shift/dtos/create-shift.dto';
-import { UpdateShiftDto } from '@modules/payroll/shift/dtos/update-shift.dto';
+import { CreateShiftDto, UpdateShiftDto } from '@modules/payroll/shift/dtos';
 import { ShiftService } from './shift.service';
 
 @Controller('payroll/shifts')
@@ -22,16 +20,7 @@ export class ShiftController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() dto: CreateShiftDto) {
-    const createData = {
-      ...dto,
-      shiftStartTime: new Date(dto.shiftStartTime),
-      shiftEndTime: new Date(dto.shiftEndTime),
-      breaks: dto.breaks?.map(b => ({
-        startTime: new Date(b.startTime),
-        endTime: new Date(b.endTime),
-      })),
-    };
-    return this.shiftService.createShift(createData);
+    return this.shiftService.createShift(dto);
   }
 
   @Get(':id')
@@ -55,7 +44,7 @@ export class ShiftController {
         new Date(endDate),
       );
     }
-    return [];
+    return this.shiftService.findAll();
   }
 
   @Put(':id')
@@ -63,11 +52,7 @@ export class ShiftController {
     @Param('id') id: string,
     @Body() dto: UpdateShiftDto,
   ) {
-    const updateData = {
-      ...dto,
-      shiftEndTime: dto.shiftEndTime ? new Date(dto.shiftEndTime) : undefined,
-    };
-    return this.shiftService.updateShift(id, updateData);
+    return this.shiftService.updateShift(id, dto);
   }
 
   @Delete(':id')

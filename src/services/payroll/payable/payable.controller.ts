@@ -6,13 +6,13 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-
 import { PayableService } from './payable.service';
-import { CreatePayableDto } from '@modules/payroll/payable/dtos/create-payable.dto';
-import { UpdatePayableDto } from '@modules/payroll/payable/dtos/update-payable.dto';
+import { CreatePayableDto, UpdatePayableDto } from '@modules/payroll/payable/dtos';
+import { PaginationDto } from '@common/dto/pagination.dto';
 
 @Controller('payroll/payables')
 export class PayableController {
@@ -26,8 +26,8 @@ export class PayableController {
 
   @Post('bulk')
   @HttpCode(HttpStatus.CREATED)
-  async createBulk(@Body() dto: CreatePayableDto[]) {
-    return this.payableService.createPayablesBulk(dto);
+  async createBulk(@Body() dtos: CreatePayableDto[]) {
+    return this.payableService.createPayablesBulk(dtos);
   }
 
   @Post('process')
@@ -39,6 +39,14 @@ export class PayableController {
     },
   ) {
     return this.payableService.processPayablesForPayout(body);
+  }
+
+  @Get()
+  async findAll(@Query() paginationDto: PaginationDto) {
+    if (paginationDto.page && paginationDto.limit) {
+      return this.payableService.findWithPagination(paginationDto);
+    }
+    return this.payableService.findAll();
   }
 
   @Get('worker/:workerId')
