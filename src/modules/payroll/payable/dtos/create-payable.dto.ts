@@ -9,7 +9,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { PayableType } from '../enums/payable.enum';
+import { PayableType, EarningType } from '../enums';
 
 export class CreatePayableDto {
   @IsUUID()
@@ -37,7 +37,7 @@ export class CreatePayableDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(255)
-  externalId: string; // Idempotency key - e.g., 'PROJECT_123_CONTRACTOR_456'
+  externalId: string;
 
   @IsString()
   @IsOptional()
@@ -53,12 +53,11 @@ export class CreatePayableDto {
   @IsOptional()
   scheduledPaymentDate?: string;
 
-    @IsString()
+  @IsString()
   @IsNotEmpty()
   externalWorkerId: string;
 
-  @IsString()
+  @IsEnum(EarningType)
   @IsNotEmpty()
-  evereeEarningType: string;
-
+  evereeEarningType: EarningType;
 }

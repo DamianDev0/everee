@@ -4,8 +4,8 @@ export type CorrectionPaymentTimeframe = 'NEXT_PAYROLL_PAYMENT' | 'IMMEDIATELY' 
 export type TaxCalculationConfigCode = 'STANDARD' | 'DIFFICULTY_OF_CARE';
 
 export interface ShiftBreak {
-  breakStartEpochSeconds: number;
-  breakEndEpochSeconds: number;
+  segmentConfigCode: string;
+  breakDuration: string;
 }
 
 export interface FullyClassifiedHours {

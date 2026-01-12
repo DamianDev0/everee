@@ -6,7 +6,6 @@ import {
 import {
   CreateShiftDto,
   UpdateShiftDto,
-  CorrectShiftDto,
 } from '@modules/payroll/shift/dtos';
 
 export class ShiftMapper {
@@ -18,14 +17,16 @@ export class ShiftMapper {
     };
 
     if (dto.breaks?.length) {
-      request.createBreaks = dto.breaks.map((br) => ({
-        type: br.type as any,
-        breakStartEpochSeconds: Math.floor(new Date(br.startTime).getTime() / 1000),
-        breakEndEpochSeconds: Math.floor(new Date(br.endTime).getTime() / 1000),
-        startTime: br.startTime,
-        endTime: br.endTime,
-        durationMinutes: br.durationMinutes,
-      }));
+      request.createBreaks = dto.breaks.map((br) => {
+        const startMs = new Date(br.startTime).getTime();
+        const endMs = new Date(br.endTime).getTime();
+        const durationMinutes = Math.floor((endMs - startMs) / 60000);
+        
+        return {
+          segmentConfigCode: br.type === 'unpaid' ? 'DEFAULT_UNPAID' : 'DEFAULT_PAID',
+          breakDuration: `PT${durationMinutes}M`,
+        };
+      });
     }
 
     if (dto.effectiveHourlyPayRate !== undefined) {
@@ -35,6 +36,7 @@ export class ShiftMapper {
       };
     }
 
+    if (dto.workLocationId) request.workLocationId = dto.workLocationId;
     if (dto.workersCompClassCode) request.workersCompClassCode = dto.workersCompClassCode;
     if (dto.notes) request.note = dto.notes;
 
@@ -56,37 +58,6 @@ export class ShiftMapper {
 
     if (dto.workersCompClassCode) request.workersCompClassCode = dto.workersCompClassCode;
     if (dto.notes) request.note = dto.notes;
-
-    return request;
-  }
-
-  static toCorrectShiftRequest(dto: CorrectShiftDto): CreateShiftRequest {
-    const request: CreateShiftRequest = {
-      externalWorkerId: dto.externalId,
-      shiftStartEpochSeconds: Math.floor(new Date(dto.shiftStartTime).getTime() / 1000),
-      shiftEndEpochSeconds: Math.floor(new Date(dto.shiftEndTime).getTime() / 1000),
-      correctionPaymentTimeframe: dto.correctionPaymentTimeframe as any,
-    };
-
-    if (dto.breaks?.length) {
-      request.createBreaks = dto.breaks.map((br) => ({
-        type: br.type as any,
-        breakStartEpochSeconds: Math.floor(new Date(br.startTime).getTime() / 1000),
-        breakEndEpochSeconds: Math.floor(new Date(br.endTime).getTime() / 1000),
-        startTime: br.startTime,
-        endTime: br.endTime,
-        durationMinutes: br.durationMinutes,
-      }));
-    }
-
-    if (dto.effectiveHourlyPayRate !== undefined) {
-      request.effectiveHourlyPayRate = {
-        amount: dto.effectiveHourlyPayRate.toString(),
-        currency: 'USD',
-      };
-    }
-
-    if (dto.correctionNotes) request.note = dto.correctionNotes;
 
     return request;
   }

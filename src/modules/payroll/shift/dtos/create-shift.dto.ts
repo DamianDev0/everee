@@ -1,24 +1,23 @@
 import {
   IsNotEmpty,
   IsUUID,
-  IsDateString,
   IsOptional,
   IsNumber,
   IsString,
   IsArray,
   ValidateNested,
-  IsEnum,
   IsBoolean,
   MaxLength,
   Min,
+  IsIn,
+  IsDateString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { BreakType } from '../enums/shift.enum';
 
 export class ShiftBreakDto {
-  @IsEnum(BreakType)
+  @IsIn(['paid', 'unpaid'])
   @IsNotEmpty()
-  type: BreakType;
+  type: 'paid' | 'unpaid';
 
   @IsDateString()
   @IsNotEmpty()
@@ -27,10 +26,6 @@ export class ShiftBreakDto {
   @IsDateString()
   @IsNotEmpty()
   endTime: string;
-
-  @IsNumber()
-  @Min(0)
-  durationMinutes: number;
 }
 
 export class CreateShiftDto {
@@ -41,10 +36,6 @@ export class CreateShiftDto {
   @IsString()
   @IsNotEmpty()
   externalWorkerId: string;
-
-  @IsUUID()
-  @IsOptional()
-  workLocationId?: string;
 
   @IsDateString()
   @IsNotEmpty()
@@ -65,6 +56,10 @@ export class CreateShiftDto {
   @Min(0)
   effectiveHourlyPayRate?: number;
 
+  @IsNumber()
+  @IsOptional()
+  workLocationId?: number;
+
   @IsString()
   @IsOptional()
   @MaxLength(20)
@@ -72,31 +67,9 @@ export class CreateShiftDto {
 
   @IsString()
   @IsOptional()
-  @MaxLength(255)
-  projectName?: string;
-
-  @IsString()
-  @IsOptional()
-  @MaxLength(100)
-  projectId?: string;
-
-  @IsString()
-  @IsOptional()
   notes?: string;
 
   @IsBoolean()
   @IsOptional()
-  isCorrection?: boolean;
-
-  @IsUUID()
-  @IsOptional()
-  originalShiftId?: string;
-
-  @IsBoolean()
-  @IsOptional()
   correctionAuthorized?: boolean;
-
-  @IsString()
-  @IsOptional()
-  correctionNotes?: string;
 }
