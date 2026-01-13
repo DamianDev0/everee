@@ -29,6 +29,8 @@ import {
 import {
   UpdateWorkerDto,
   TerminateWorkerDto,
+  UpdatePositionDto,
+  UpdateHomeAddressDto,
 } from '@modules/payroll/worker/dtos/management';
 
 @Controller('payroll/workers')
@@ -135,5 +137,21 @@ export class WorkerController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteWorker(@Param('id') id: string) {
     await this.workerService.deleteWorker(id);
+  }
+
+  @Patch(':id/position')
+  async updatePosition(
+    @Param('id') id: string,
+    @Body() dto: UpdatePositionDto,
+  ) {
+    return this.workerService.updatePosition(id, dto);
+  }
+
+  @Patch(':id/address')
+  async updateHomeAddress(
+    @Param('id') id: string,
+    @Body() dto: UpdateHomeAddressDto,
+  ) {
+    return this.workerService.updateHomeAddress(id, dto);
   }
 }

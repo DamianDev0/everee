@@ -22,6 +22,8 @@ import {
 import {
   UpdateWorkerDto,
   TerminateWorkerDto,
+  UpdatePositionDto,
+  UpdateHomeAddressDto,
 } from '@modules/payroll/worker/dtos/management';
 
 import {
@@ -132,5 +134,13 @@ export class WorkerService {
       evereeWorkerId,
       workerProfile,
     );
+  }
+
+  async updatePosition(id: string, dto: UpdatePositionDto): Promise<GetWorkerResponse> {
+    return this.managementService.updatePosition(id, dto);
+  }
+
+  async updateHomeAddress(id: string, dto: UpdateHomeAddressDto): Promise<GetWorkerResponse> {
+    return this.managementService.updateHomeAddress(id, dto);
   }
 }

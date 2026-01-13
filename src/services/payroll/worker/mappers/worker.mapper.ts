@@ -1,9 +1,3 @@
-/**
- * Worker Mapper
- * Converts DTOs to Everee API request interfaces
- * Maintains clean separation between API layer and integration layer
- */
-
 import {
   OnboardingContractorRequest,
   OnboardingEmployeeRequest,
@@ -14,6 +8,8 @@ import {
   CreateEmbeddedSessionRequest,
   UpdateWorkerRequest,
   TerminateWorkerRequest,
+  UpdatePositionRequest,
+  UpdateHomeAddressRequest,
 } from '@integrations/everee/interfaces/worker';
 
 import {
@@ -26,6 +22,8 @@ import {
   CreateEmbeddedSessionDto,
   UpdateWorkerDto,
   TerminateWorkerDto,
+  UpdatePositionDto,
+  UpdateHomeAddressDto,
 } from '@modules/payroll/worker/dtos';
 
 export class WorkerMapper {
@@ -277,13 +275,35 @@ export class WorkerMapper {
     };
   }
 
-  /**
-   * Map TerminateWorkerDto to TerminateWorkerRequest
-   */
   static toTerminateWorkerRequest(dto: TerminateWorkerDto): TerminateWorkerRequest {
     return {
       terminationDate: dto.terminationDate,
       terminationReason: dto.terminationReason,
+    };
+  }
+
+  static toUpdatePositionRequest(dto: UpdatePositionDto): UpdatePositionRequest {
+    return {
+      title: dto.title,
+      payType: dto.payType,
+      payRate: {
+        amount: dto.payRate.toString(),
+        currency: dto.currency,
+      },
+      expectedWeeklyHours: dto.expectedWeeklyHours,
+      effectiveDate: dto.effectiveDate,
+      defaultWorkersCompClassCode: dto.defaultWorkersCompClassCode,
+    };
+  }
+
+  static toUpdateHomeAddressRequest(dto: UpdateHomeAddressDto): UpdateHomeAddressRequest {
+    return {
+      line1: dto.line1,
+      line2: dto.line2,
+      city: dto.city,
+      state: dto.state,
+      postalCode: dto.postalCode,
+      effectiveDate: dto.effectiveDate,
     };
   }
 }
